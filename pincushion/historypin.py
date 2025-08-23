@@ -8,7 +8,7 @@ import tqdm
 logger = logging.getLogger(__name__)
 
 
-def get_data(user_id: int, progress: bool = True) -> dict:
+def get_user(user_id: int, progress: bool = True) -> dict:
     data: Dict[str, Union[dict, list]] = {}
     data["user"] = get_json("user/get", {"id": user_id})
     data["collections"] = list(
@@ -59,6 +59,45 @@ def get_listing(
                 yield get_json(f'{result["slug"]}/projects/get', {})
             elif listing_type == "pin":
                 yield get_json("pin/get", {"id": result["id"]})
+
+
+def get_collection(slug: str, progress: bool = True) -> dict:
+    data = get_json(f"{slug}/projects/get", params={})
+
+    data["collections"] = []
+    data["pins"] = []
+
+    for result in get_gallery(slug):
+        if result["node_type"] == "pin":
+            data["pins"].append(
+                get_json("pin/get", {"id": result["id"]})
+            )
+        elif result["node_type"] == "project":
+            # This is recursive since a collection can contain collections!
+            # However not all the pins and subcollections in a collection may belong to
+            # the collection. The hierarchical slug parent/child is used
+            # to fetch only the relevant pins and subcollections.
+            data["collections"].append(
+                get_collection(f"{slug}/{result['slug']}")
+            )
+
+    add_comments(data["pins"])
+
+    return data
+
+
+def get_gallery(slug: str) -> Generator[dict, None, None]:
+    page = 1
+    while True:
+        data = get_json(f"{slug}/pin/get_gallery", params={"paging": page})
+        if len(data["results"]) == 0:
+            break
+
+        for result in data["results"]:
+            if result["node_type"] in ["project", "pin"]:
+                yield result
+
+        page += 1
 
 
 def get_json(api_path: str, params: dict, sleep=0.5) -> dict:

@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 from shutil import copytree, rmtree
-from typing import Generator, Optional, List
+from typing import Generator, Optional
 
 import jinja2
 import requests
@@ -19,102 +19,129 @@ env = jinja2.Environment(
 
 
 class ArchiveGenerator:
-    def __init__(self, archive_dir: Path, overwrite: bool = False):
+    def __init__(
+        self, archive_dir: Path, overwrite: bool = False, cookie_file: str = None
+    ):
         self.overwrite = overwrite
         self.archive_dir = archive_dir
         if not self.archive_dir.is_dir():
             raise Exception(f"No such archive directory: {archive_dir}")
 
+        self.cookie_file = cookie_file
         self.data = json.load((self.archive_dir / "data.json").open())
 
     def generate(self) -> None:
         self.download_media()
         self.write_index()
-        self.write_collections()
         self.write_tags()
         self.write_map()
 
+        if self.index_type == "user":
+            self.write_collections()
+        else:
+            self.write_pins(collection=self, pins=self.data["pins"])
+
     def write_index(self) -> None:
         tmpl = env.get_template("index.html")
-        html = tmpl.render(user=self.data["user"], collections=self.collections())
+        html = tmpl.render(
+            title=self.index_title,
+            description=self.index_description,
+            collections=self.collections(),
+        )
         (self.archive_dir / "index.html").open("w").write(html)
 
     def write_collections(self) -> None:
         coll_tmpl = env.get_template("collection.html")
-        pin_tmpl = env.get_template("pin.html")
         for coll in self.collections():
             pins = list(self.collection_pins(coll["slug"]))
+
             html = coll_tmpl.render(
                 collection=coll,
                 pins=pins,
-                user=self.data['user'],
-                title=coll['title']
+                index_title=self.index_title,
+                title=coll["title"],
             )
             self.write(html, "collections", coll["slug"], "index.html")
-            for pin in pins:
-                html = pin_tmpl.render(
-                    pin=pin,
-                    collection=coll,
-                    user=self.data["user"],
-                    title=pin['caption']
-                )
-                self.write(html, f"pins/{pin['id']}/index.html")
+
+            self.write_pins(collection=coll, pins=pins)
+
+    def write_pins(self, collection: dict, pins: list[dict]) -> None:
+        pin_tmpl = env.get_template("pin.html")
+        for pin in pins:
+            pin_dir = self.archive_dir / "pins" / str(pin["id"])
+
+            if (pin_dir / "image.jpg").is_file():
+                media_type = "image"
+            elif (pin_dir / "media.mp4").is_file():
+                media_type = "video"
+            elif (pin_dir / "media.mp3").is_file():
+                media_type = "audio"
+            else:
+                logger.error(f"unknown pin media in {pin_dir}")
+
+            html = pin_tmpl.render(
+                pin=pin,
+                media_type=media_type,
+                collection=collection,
+                index_title=self.index_title,
+                title=pin["caption"],
+            )
+
+            self.write(html, "pins", str(pin["id"]), "index.html")
 
     def write_tags(self) -> None:
         tag_index = defaultdict(list)
-        for pin in self.data['pins']:
-            for tag in pin['tags']:
+        for pin in self.data["pins"]:
+            for tag in pin["tags"]:
                 # yes, we've noticed some nulls in tags
-                text = tag['text'].replace('\0', '')
+                text = tag["text"].replace("\0", "")
                 tag_index[text].append(pin)
 
         tags_tmpl = env.get_template("tags.html")
         html = tags_tmpl.render(
             tags=sorted(tag_index.keys()),
             tag_index=tag_index,
-            user=self.data['user'],
-            title="Tags"
+            index_title=self.index_title,
+            title="Tags",
         )
         self.write(html, "tags", "index.html")
 
         tag_tmpl = env.get_template("tag.html")
         for tag, pins in tag_index.items():
             html = tag_tmpl.render(
-                tag=tag,
-                pins=pins,
-                user=self.data['user'],
-                title=f"Tag {tag}"
+                tag=tag, pins=pins, index_title=self.index_title, title=f"Tag {tag}"
             )
             self.write(html, "tags", f"{tag}.html")
 
     def write_map(self) -> None:
-        geojson = {
-            "type": "FeatureCollection",
-            "features": []
-        }
+        geojson = {"type": "FeatureCollection", "features": []}
 
-        for pin in self.data['pins']:
-            if pin['location']['lat']:
-                geojson["features"].append({
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [
-                            pin['location']['lng'],
-                            pin['location']['lat']
-                        ]
-                    },
-                    "properties": {
-                        "name": pin["caption"],
-                        "popupContent": pin["description"],
-                        "id": pin["id"]
+        for pin in self.data["pins"]:
+            if pin["location"]["lat"]:
+                geojson["features"].append(
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [
+                                pin["location"]["lng"],
+                                pin["location"]["lat"],
+                            ],
+                        },
+                        "properties": {
+                            "name": pin["caption"],
+                            "popupContent": pin["description"],
+                            "id": pin["id"],
+                        },
                     }
-                })
+                )
 
         self.write(json.dumps(geojson, indent=2), "map", "pins.geojson")
 
         tmpl = env.get_template("map.html")
-        html = tmpl.render(user=self.data['user'], geojson=json.dumps(geojson, indent=2))
+        html = tmpl.render(
+            index_title=self.index_title, geojson=json.dumps(geojson, indent=2)
+        )
         self.write(html, "map", "index.html")
 
         leaflet = Path(__file__).parent / "templates" / "leaflet"
@@ -123,10 +150,19 @@ class ArchiveGenerator:
             rmtree(leaflet_dir)
         copytree(leaflet, leaflet_dir)
 
-    def download_media(self) -> None:
-        self.fetch_file(self.data["user"]["image"], "user.jpg")
+    def download_media(self, progress=False) -> None:
+        if self.index_type == "user":
+            self.fetch_file(self.data["user"]["image"], "index.jpg")
+        else:
+            self.fetch_file(self.data["image_url"], "index.jpg")
+
         collections = list(self.collections())
-        for coll in tqdm.tqdm(collections, desc="{:20}".format("collection media")):
+        if progress:
+            collections = tqdm.tqdm(
+                collections, desc="{:20}".format("collection media")
+            )
+
+        for coll in collections:
             if coll["image_url"]:
                 self.fetch_file(
                     coll["image_url"], f"collections/{coll['slug']}/image.jpg"
@@ -135,7 +171,11 @@ class ArchiveGenerator:
             elif image_url := self.get_first_image_url(coll["slug"]):
                 self.fetch_file(image_url, f"collections/{coll['slug']}/image.jpg")
 
-        for pin in tqdm.tqdm(self.data["pins"], desc="{:20}".format("pin media")):
+        pins = self.data["pins"]
+        if progress:
+            pins = tqdm.tqdm(pins, desc="{:20}".format("pin media"))
+
+        for pin in pins:
             url = pin["display"]["content"]
             media_type = self.get_media_type(pin)
 
@@ -162,7 +202,6 @@ class ArchiveGenerator:
             logger.error(f"received {resp.status_code} when fetching {url}")
 
     def fetch_media(self, url: str, media_type: str, file_path: str) -> None:
-        logger.info(f"downloading media {url}")
         path = self.archive_dir / file_path
 
         if (
@@ -170,6 +209,8 @@ class ArchiveGenerator:
         ) and not self.overwrite:
             logger.info(f"skipping download of {url} since it is already present")
             return
+
+        logger.info(f"downloading media {url} to {path}")
 
         opts = {
             "noprogress": True,
@@ -190,17 +231,23 @@ class ArchiveGenerator:
                 {"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}
             ]
 
+        # optionally use cookies to download video
+        if self.cookie_file:
+            opts["cookiefile"] = self.cookie_file
+
         with yt_dlp.YoutubeDL(params=opts) as ydl:
             try:
                 meta = ydl.extract_info(url)
                 return meta
             except Exception as e:
-                logger.warn(f"Unable to download media {url}: {e}")
+                logger.error(f"Unable to download media {url}: {e}")
 
     def write(self, html: str, *path_parts: str) -> None:
         path = self.archive_dir.joinpath(*path_parts)
         path.parent.mkdir(exist_ok=True, parents=True)
-        path.open("w").write(html)
+        logger.info(f"Writing html to {path}")
+        with path.open("w") as fh:
+            fh.write(html)
 
     def collections(self) -> Generator[dict, None, None]:
         for coll in self.data["collections"]:
@@ -231,3 +278,21 @@ class ArchiveGenerator:
             if self.get_media_type(pin) == "image":
                 return pin["display"]["content"]
         return None
+
+    @property
+    def index_type(self):
+        return "user" if "user" in self.data else "collection"
+
+    @property
+    def index_title(self):
+        if self.index_type == "user":
+            return self.data["user"]["name"]
+        else:
+            return self.data["title"]
+
+    @property
+    def index_description(self):
+        if self.index_type == "user":
+            return self.data["user"]["description"]
+        else:
+            return self.data["description"] or self.data["short_description"]

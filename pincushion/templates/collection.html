@@ -2,13 +2,19 @@
 
 {% block breadcrumb %}
 <ul>
-  <li><a href="../../index.html">{{ user.name }}</a></li>
+  <li><a href="../../index.html">{{ index_title }}</a></li>
   <li>{{ collection.title }}</li>
 </ul>
 {% endblock %}
 
 {% block main %}
-<p class="description">{{ collection.description | safe }}</p>
+<p class="description">
+  {% if collection.description %}
+  {{ collection.description | safe }}
+  {% else %}
+  {{ collection.short_description }}
+  {% endif %}
+</p>
 
 <section class="gallery">
   {% for pin in pins %}

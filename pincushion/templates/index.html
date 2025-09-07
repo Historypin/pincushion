@@ -2,12 +2,18 @@
 {% block main %}
 
 <section class="profile">
-  <img src="user.jpg">
-  <h1>{{ user.name }}</h1>
+  <div class="media">
+    <img alt="{{ title }}" src="index.jpg">
+  </div>
+  {% if title %}
+  <h1>{{ title }}</h1>
   <p>
-    {{ user.description | safe}}  
+    {{ description | safe }}  
   </p>
 </section>
+
+
+{% endif %}
 
 <section class="gallery">
   {% for coll in collections %}

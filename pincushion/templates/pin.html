@@ -2,7 +2,7 @@
 
 {% block breadcrumb %}
 <ul>
-  <li><a href="../../index.html">{{ user.name }}</a></li>
+  <li><a href="../../index.html">{{ index_title }}</a></li>
   <li><a href="../../collections/{{ collection.slug }}/index.html">{{ collection.title }}</a></li>
   <li>{{ pin.caption }}</li>
 </ul>
@@ -11,11 +11,11 @@
 {% block main %}
 <section class="pin">
   <div class="media">
-  {% if pin.type == 'photo' %}
+  {% if media_type == 'image' %}
   <img src="image.jpg">
-  {% elif pin.type == 'video' %}
+  {% elif media_type == 'video' %}
   <video src="media.mp4" controls>
-  {% elif pin.type == 'audio' %}
+  {% elif media_type == 'audio' %}
   <audio src="media.mp3" controls>
   {% endif %}
   </div>
@@ -44,6 +44,9 @@
 <section class="metadata">
 
   <dl>
+
+    <dt>Creator</dt>
+    <dd>{{ pin.user_name }}</dd>
 
     {% if pin.location %}
     <dt>Location</dt>
@@ -120,8 +123,8 @@
 
     <dt>Historypin Link</dt>
     <dd>
-      <a href="https://www.historypin.org/en/person/{{ user.id }}/explore/pin/{{ pin.id }}">
-        https://www.historypin.org/en/person/{{ user.id }}/explore/pin/{{ pin.id }}
+      <a href="https://www.historypin.org/en/person/{{ pin.user_id }}/explore/pin/{{ pin.id }}">
+        https://www.historypin.org/en/person/{{ pin.user_id }}/explore/pin/{{ pin.id }}
       </a>
     </dd>
 

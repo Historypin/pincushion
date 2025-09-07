@@ -3,6 +3,7 @@ import logging
 import pathlib
 from io import TextIOWrapper
 from pathlib import Path
+from typing import Optional
 
 import click
 from pincushion import historypin, archive
@@ -24,7 +25,12 @@ def cli():
     type=click.Path(),
     default="archive",
 )
-def user(user_id: int, archive_path: click.Path):
+@click.option(
+    "--cookie-file",
+    help="use a cookie file to download video, see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp",
+    type=click.Path(exists=True, dir_okay=False),
+)
+def user(user_id: int, archive_path: click.Path, cookie_file: Optional[TextIOWrapper]):
     """
     Create an archive for a given Historypin User ID. This is probably the
     command you will want to be using.
@@ -37,7 +43,7 @@ def user(user_id: int, archive_path: click.Path):
     data_path = archive_dir / "data.json"
     json.dump(data, data_path.open("w"), indent=2)
 
-    archive.ArchiveGenerator(archive_dir).generate()
+    archive.ArchiveGenerator(archive_dir, cookie_file=cookie_file).generate()
 
 
 @cli.command("collection")
@@ -48,7 +54,14 @@ def user(user_id: int, archive_path: click.Path):
     type=click.Path(),
     default="archive",
 )
-def collection(slug: str, archive_path: click.Path):
+@click.option(
+    "--cookie-file",
+    help="use a cookie file to download video, see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp",
+    type=click.Path(exists=True, dir_okay=False),
+)
+def collection(
+    slug: str, archive_path: click.Path, cookie_file: Optional[TextIOWrapper]
+):
     """
     Create an archive for a given Historypin Collection. This is useful in
     situations where you want to create an archive of all the pins and
@@ -63,18 +76,23 @@ def collection(slug: str, archive_path: click.Path):
     data_path = archive_dir / "data.json"
     json.dump(data, data_path.open("w"), indent=2)
 
-    #archive.ArchiveGenerator(archive_dir).generate()
+    archive.ArchiveGenerator(archive_dir, cookie_file=cookie_file).generate()
 
 
 @cli.command()
 @click.option("--archive-path")
-def regenerate(archive_path: str):
+@click.option(
+    "--cookie-file",
+    help="use a cookie file to download video, see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp",
+    type=click.Path(exists=True, dir_okay=False),
+)
+def regenerate(archive_path: str, cookie_file: click.Path):
     """
     Regenerate the archive using a directory containing a data.json file. This
     can be useful if improvements are made to the static site generation, and
     you don't want to have to refetch all the data from Historypin.
     """
-    generator = archive.ArchiveGenerator(Path(archive_path))
+    generator = archive.ArchiveGenerator(Path(archive_path), cookie_file=cookie_file)
     generator.generate()
 
 
@@ -111,11 +129,16 @@ def collection_data(slug: str, output: TextIOWrapper):
     help="An existing archive directory",
     type=click.Path(file_okay=False),
 )
-def media(archive_path: str):
+@click.option(
+    "--cookie-file",
+    help="use a cookie file to download video, see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp",
+    type=click.Path(exists=True, dir_okay=False),
+)
+def media(archive_path: str, cookie_file: click.Path):
     """
     Download the media for a given archive. This can be useful for testing.
     """
-    generator = archive.ArchiveGenerator(Path(archive_path))
+    generator = archive.ArchiveGenerator(Path(archive_path), cookie_file=cookie_file)
     generator.download_media()
 
 

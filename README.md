@@ -1,5 +1,7 @@
 # pincushion
 
+[![Test](https://github.com/historypin/pincushion/actions/workflows/test.yml/badge.svg)](https://github.com/historypin/pincushion/actions/workflows/test.yml)
+
 *pincushion* is a command line tool for creating archives for resources on [Historypin]. It reads data from the [Historypin API] and writes a static website to a given directory. The resulting file structure looks something like:
 
 ```

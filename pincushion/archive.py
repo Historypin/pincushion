@@ -150,7 +150,7 @@ class ArchiveGenerator:
             rmtree(leaflet_dir)
         copytree(leaflet, leaflet_dir)
 
-    def download_media(self, progress=False) -> None:
+    def download_media(self, progress=True) -> None:
         if self.index_type == "user":
             self.fetch_file(self.data["user"]["image"], "index.jpg")
         else:

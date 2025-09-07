@@ -33,13 +33,9 @@ class ArchiveGenerator:
     def generate(self) -> None:
         self.download_media()
         self.write_index()
+        self.write_collections()
         self.write_tags()
         self.write_map()
-
-        if self.index_type == "user":
-            self.write_collections()
-        else:
-            self.write_pins(collection=self, pins=self.data["pins"])
 
     def write_index(self) -> None:
         tmpl = env.get_template("index.html")
@@ -78,6 +74,7 @@ class ArchiveGenerator:
                 media_type = "audio"
             else:
                 logger.error(f"unknown pin media in {pin_dir}")
+                return
 
             html = pin_tmpl.render(
                 pin=pin,

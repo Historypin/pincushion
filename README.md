@@ -53,10 +53,10 @@ pincushion user --user-id 11670 --archive-path my-archive
 
 Open the `my-archive/index.html` file in your browser.
 
-Similarly you can create an archive for a "collection":
+Similarly you can create an archive for a "collection" as long as the collection contains sub-collections:
 
 ```
-pincushion collection --slug 2025-summer-institute
+pincushion collection --slug 2025-summer-institute --archive-path my-collection
 ```
 
 [Historypin]: https://historypin.org

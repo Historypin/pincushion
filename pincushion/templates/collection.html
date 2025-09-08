@@ -23,6 +23,8 @@
     <div class="name">{{ pin.caption }}</div>
     {% if pin.type == 'photo' %}
     <img src="../../pins/{{ pin.id }}/image.jpg">
+    {% elif pin.type == 'video' and 'soundcloud' in pin.display.content %}
+    <audio src="../../pins/{{ pin.id }}/media.mp3" controls>
     {% elif pin.type == 'video' %}
     <video src="../../pins/{{ pin.id }}/media.mp4" controls>
     {% elif pin.type == 'audio' %}

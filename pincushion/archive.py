@@ -66,7 +66,9 @@ class ArchiveGenerator:
         for pin in pins:
             pin_dir = self.archive_dir / "pins" / str(pin["id"])
 
-            if (pin_dir / "image.jpg").is_file():
+            if pin['type'] == 'text':
+                media_type = "text"
+            elif (pin_dir / "image.jpg").is_file():
                 media_type = "image"
             elif (pin_dir / "media.mp4").is_file():
                 media_type = "video"

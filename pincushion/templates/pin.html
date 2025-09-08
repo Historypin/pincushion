@@ -17,6 +17,8 @@
   <video src="media.mp4" controls>
   {% elif media_type == 'audio' %}
   <audio src="media.mp3" controls>
+  {% elif media_type == 'text' %}
+  <p>{{ pin.display.content }}</p>
   {% endif %}
   </div>
 </section>

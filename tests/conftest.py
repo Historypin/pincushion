@@ -8,7 +8,9 @@ SITE = "https://hp.test"
 API = f"{SITE}/api/v1"
 
 
-def page(results: list[dict], next: str | None = None, count: int | None = None) -> dict:
+def page(
+    results: list[dict], next: str | None = None, count: int | None = None
+) -> dict:
     """Build the body of one page of an /api/v1/ list."""
     return {
         "count": len(results) if count is None else count,

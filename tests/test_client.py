@@ -38,7 +38,11 @@ def test_list_follows_next(client):
     )
     responses.get(
         f"{API}/pins/",
-        json={"count": 3, "next": f"{API}/pins/?page=2", "results": [{"id": 1}, {"id": 2}]},
+        json={
+            "count": 3,
+            "next": f"{API}/pins/?page=2",
+            "results": [{"id": 1}, {"id": 2}],
+        },
     )
 
     assert [pin["id"] for pin in client.list("pins/")] == [1, 2, 3]
@@ -81,7 +85,12 @@ def test_is_capped(client, count, capped):
         (403, {"cf-mitigated": "challenge"}, None, "Cloudflare"),
         (403, {}, {"detail": "no"}, "API Access"),
         (404, {}, {"detail": "Not found."}, "not found"),
-        (400, {}, {"collections": ["Select a valid choice."]}, "Select a valid choice."),
+        (
+            400,
+            {},
+            {"collections": ["Select a valid choice."]},
+            "Select a valid choice.",
+        ),
     ],
 )
 def test_error_messages(client, status, headers, body, phrase):

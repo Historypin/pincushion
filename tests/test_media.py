@@ -50,7 +50,9 @@ def test_fetch_image_skips_existing(tmp_path):
     path.parent.mkdir(parents=True)
     path.write_bytes(b"old")
 
-    assert MediaDownloader(tmp_path, SITE).fetch_image("https://cdn.test/a.jpg", "pins/1/image.jpg")
+    assert MediaDownloader(tmp_path, SITE).fetch_image(
+        "https://cdn.test/a.jpg", "pins/1/image.jpg"
+    )
 
     assert len(responses.calls) == 0
     assert path.read_bytes() == b"old"
@@ -59,11 +61,16 @@ def test_fetch_image_skips_existing(tmp_path):
 @responses.activate
 def test_pin_image_refetches_expired_link(tmp_path, client):
     responses.get("https://gcs.test/old.jpg", status=403)
-    responses.get(f"{SITE}/api/v1/pins/5/", json={"id": 5, "image_url": "https://gcs.test/new.jpg"})
+    responses.get(
+        f"{SITE}/api/v1/pins/5/",
+        json={"id": 5, "image_url": "https://gcs.test/new.jpg"},
+    )
     responses.get("https://gcs.test/new.jpg", body=b"fresh")
     downloader = MediaDownloader(tmp_path, SITE, client=client)
 
-    downloader.pin_image({"id": 5, "type": "IMAGE", "image_url": "https://gcs.test/old.jpg"})
+    downloader.pin_image(
+        {"id": 5, "type": "IMAGE", "image_url": "https://gcs.test/old.jpg"}
+    )
 
     assert (tmp_path / "pins/5/image.jpg").read_bytes() == b"fresh"
     pin_calls = [c for c in responses.calls if c.request.url.endswith("/pins/5/")]
@@ -73,12 +80,17 @@ def test_pin_image_refetches_expired_link(tmp_path, client):
 @responses.activate
 def test_pin_image_gives_up_after_one_refetch(tmp_path, client, caplog):
     responses.get("https://gcs.test/old.jpg", status=403)
-    responses.get(f"{SITE}/api/v1/pins/5/", json={"id": 5, "image_url": "https://gcs.test/new.jpg"})
+    responses.get(
+        f"{SITE}/api/v1/pins/5/",
+        json={"id": 5, "image_url": "https://gcs.test/new.jpg"},
+    )
     responses.get("https://gcs.test/new.jpg", status=403)
     downloader = MediaDownloader(tmp_path, SITE, client=client)
 
     with caplog.at_level(logging.ERROR):
-        downloader.pin_image({"id": 5, "type": "IMAGE", "image_url": "https://gcs.test/old.jpg"})
+        downloader.pin_image(
+            {"id": 5, "type": "IMAGE", "image_url": "https://gcs.test/old.jpg"}
+        )
 
     assert not (tmp_path / "pins/5/image.jpg").exists()
     assert any(r.levelno == logging.ERROR for r in caplog.records)

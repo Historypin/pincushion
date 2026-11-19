@@ -94,7 +94,9 @@ class MediaDownloader:
             return
 
         path = self.archive_dir / "pins" / str(pin["id"]) / "media.%(ext)s"
-        present = path.with_suffix(".mp3").is_file() or path.with_suffix(".mp4").is_file()
+        present = (
+            path.with_suffix(".mp3").is_file() or path.with_suffix(".mp4").is_file()
+        )
         if present and not self.overwrite:
             logger.info(f"skipping download of {url} since it is already present")
             return
@@ -111,9 +113,13 @@ class MediaDownloader:
 
         # convert to mp3 or mp4 if needed
         if kind == "video":
-            opts["postprocessors"] = [{"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}]
+            opts["postprocessors"] = [
+                {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}
+            ]
         else:
-            opts["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}]
+            opts["postprocessors"] = [
+                {"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}
+            ]
 
         # optionally use cookies to download video
         if self.cookie_file:

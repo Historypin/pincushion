@@ -71,7 +71,17 @@ def test_images_downloaded_before_next_page(client):
         log.append(("request", request.url))
         if "page=2" in request.url:
             return 200, {}, _json(page([{"id": 2, "type": "IMAGE"}], count=2))
-        return 200, {}, _json(page([{"id": 1, "type": "IMAGE"}], next=f"{API}/pins/?creator=42&page=2", count=2))
+        return (
+            200,
+            {},
+            _json(
+                page(
+                    [{"id": 1, "type": "IMAGE"}],
+                    next=f"{API}/pins/?creator=42&page=2",
+                    count=2,
+                )
+            ),
+        )
 
     responses.add_callback(responses.GET, f"{API}/pins/", callback=pins_page)
     responses.get(f"{API}/collections/", json=page([]))
@@ -86,12 +96,19 @@ def test_images_downloaded_before_next_page(client):
 def test_member_and_banner_images_fetched(client, downloader):
     responses.get(f"{API}/members/me/", json=MEMBER)
     responses.get(f"{API}/pins/", json=page([]))
-    responses.get(f"{API}/collections/", json=page([{"id": 3, "banner_image_url": "https://img.test/b.jpg"}]))
+    responses.get(
+        f"{API}/collections/",
+        json=page([{"id": 3, "banner_image_url": "https://img.test/b.jpg"}]),
+    )
 
     fetch_user(client, downloader)
 
     assert ("image", "https://img.test/m.jpg", "index.jpg") in downloader.log
-    assert ("image", "https://img.test/b.jpg", "collections/3/image.jpg") in downloader.log
+    assert (
+        "image",
+        "https://img.test/b.jpg",
+        "collections/3/image.jpg",
+    ) in downloader.log
 
 
 @responses.activate
@@ -147,7 +164,9 @@ def test_walks_tree_breadth_first_with_dedupe(client, downloader):
         3: coll(3, [4], [11]),
         4: coll(4, [], [12]),
     }
-    serve_tree(collections, {1: [2, 3], 2: [4], 3: [4]}, {1: [10], 2: [10], 3: [11], 4: [12]})
+    serve_tree(
+        collections, {1: [2, 3], 2: [4], 3: [4]}, {1: [10], 2: [10], 3: [11], 4: [12]}
+    )
 
     data = fetch_collection(client, downloader, 1)
 

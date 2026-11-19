@@ -90,7 +90,9 @@ def build_archive(
 ) -> None:
     archive_dir = Path(archive_path)
     archive_dir.mkdir(parents=True, exist_ok=True)
-    downloader = MediaDownloader(archive_dir, client.site, client=client, cookie_file=cookie_file)
+    downloader = MediaDownloader(
+        archive_dir, client.site, client=client, cookie_file=cookie_file
+    )
 
     data = fetch(downloader)
     # write the data first so regenerate can pick up if media fails
@@ -101,7 +103,9 @@ def build_archive(
 
 
 @cli.command("user")
-@click.option("--user-id", help="A Historypin user ID (default: the API key's owner)", type=int)
+@click.option(
+    "--user-id", help="A Historypin user ID (default: the API key's owner)", type=int
+)
 @archive_path_option
 @cookie_option
 @api_options
@@ -129,7 +133,9 @@ def user(
 
 
 @cli.command("collection")
-@click.option("--collection-id", help="A Historypin collection ID", type=int, required=True)
+@click.option(
+    "--collection-id", help="A Historypin collection ID", type=int, required=True
+)
 @archive_path_option
 @cookie_option
 @api_options
@@ -151,7 +157,9 @@ def collection(
         archive_path,
         cookie_file,
         client,
-        lambda downloader: historypin.fetch_collection(client, downloader, collection_id),
+        lambda downloader: historypin.fetch_collection(
+            client, downloader, collection_id
+        ),
     )
 
 
@@ -166,16 +174,22 @@ def existing_archive(
     data = json.loads((archive_dir / "data.json").read_text())
     site = site or data.get("site") or DEFAULT_SITE
     client = Client(api_key, site=site) if api_key else None
-    downloader = MediaDownloader(archive_dir, site, client=client, cookie_file=cookie_file)
+    downloader = MediaDownloader(
+        archive_dir, site, client=client, cookie_file=cookie_file
+    )
     return ArchiveGenerator(archive_dir, downloader=downloader)
 
 
 @cli.command()
-@click.option("--archive-path", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option(
+    "--archive-path", required=True, type=click.Path(file_okay=False, exists=True)
+)
 @cookie_option
 @api_options
 @api_errors
-def regenerate(archive_path: str, cookie_file: str | None, api_key: str | None, site: str | None):
+def regenerate(
+    archive_path: str, cookie_file: str | None, api_key: str | None, site: str | None
+):
     """
     Regenerate the archive using a directory containing a data.json file. This
     can be useful if improvements are made to the static site generation, and
@@ -185,8 +199,12 @@ def regenerate(archive_path: str, cookie_file: str | None, api_key: str | None, 
 
 
 @cli.command("user-data")
-@click.option("--user-id", help="A Historypin user ID (default: the API key's owner)", type=int)
-@click.option("--output", help="Where to write the data", type=click.File("w"), required=True)
+@click.option(
+    "--user-id", help="A Historypin user ID (default: the API key's owner)", type=int
+)
+@click.option(
+    "--output", help="Where to write the data", type=click.File("w"), required=True
+)
 @api_options
 @api_errors
 def user_data(user_id: int | None, output, api_key: str | None, site: str | None):
@@ -198,8 +216,12 @@ def user_data(user_id: int | None, output, api_key: str | None, site: str | None
 
 
 @cli.command("collection-data")
-@click.option("--collection-id", help="A Historypin collection ID", type=int, required=True)
-@click.option("--output", help="Where to write the data", type=click.File("w"), required=True)
+@click.option(
+    "--collection-id", help="A Historypin collection ID", type=int, required=True
+)
+@click.option(
+    "--output", help="Where to write the data", type=click.File("w"), required=True
+)
 @api_options
 @api_errors
 def collection_data(collection_id: int, output, api_key: str | None, site: str | None):
@@ -212,7 +234,9 @@ def collection_data(collection_id: int, output, api_key: str | None, site: str |
 
 
 @cli.command("media")
-@click.option("--archive-path", required=True, type=click.Path(file_okay=False, exists=True))
+@click.option(
+    "--archive-path", required=True, type=click.Path(file_okay=False, exists=True)
+)
 @cookie_option
 @api_options
 @api_errors

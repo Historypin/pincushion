@@ -140,7 +140,9 @@ def fetch_collection(
         coll = queue.pop(0)
         for pin in _fetch_pins(client, downloader, data, {"collections": coll["id"]}):
             pins.setdefault(pin["id"], pin)
-        for child in _fetch_collections(client, downloader, data, {"parent": coll["id"]}):
+        for child in _fetch_collections(
+            client, downloader, data, {"parent": coll["id"]}
+        ):
             if child["id"] not in seen:
                 seen.add(child["id"])
                 data["collections"].append(child)
@@ -150,8 +152,12 @@ def fetch_collection(
     # a regular key can't see other members' pins or collections it doesn't
     # manage, but each collection's child_ids and pin_ids list everything
     fetched = [root, *data["collections"]]
-    missing_collections = {c for coll in fetched for c in coll.get("child_ids", [])} - seen
-    missing_pins = {p for coll in fetched for p in coll.get("pin_ids", [])} - pins.keys()
+    missing_collections = {
+        c for coll in fetched for c in coll.get("child_ids", [])
+    } - seen
+    missing_pins = {
+        p for coll in fetched for p in coll.get("pin_ids", [])
+    } - pins.keys()
     if missing_collections or missing_pins:
         data["partial"] = {
             "collections_missing": len(missing_collections),

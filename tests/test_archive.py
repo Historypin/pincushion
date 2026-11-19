@@ -103,7 +103,9 @@ def test_text_pin_shows_description(archive):
 
 
 def test_partial_note(tmp_path):
-    archive = make_archive(tmp_path, partial={"collections_missing": 1, "pins_missing": 2})
+    archive = make_archive(
+        tmp_path, partial={"collections_missing": 1, "pins_missing": 2}
+    )
 
     ArchiveGenerator(archive).generate()
 
@@ -130,4 +132,3 @@ def test_collection_archive_index(tmp_path):
     ArchiveGenerator(tmp_path).generate()
 
     assert "Root collection" in read(tmp_path, "index.html")
-

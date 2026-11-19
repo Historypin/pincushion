@@ -45,7 +45,9 @@ def seen(monkeypatch):
 
 
 def test_missing_key(tmp_path):
-    result = CliRunner().invoke(pincushion.cli, ["user", "--archive-path", str(tmp_path)])
+    result = CliRunner().invoke(
+        pincushion.cli, ["user", "--archive-path", str(tmp_path)]
+    )
 
     assert result.exit_code != 0
     assert "HISTORYPIN_KEY" in result.output
@@ -66,7 +68,15 @@ def test_key_from_env(tmp_path, seen):
 def test_site_option(tmp_path, seen):
     result = CliRunner().invoke(
         pincushion.cli,
-        ["user", "--api-key", "k", "--site", "http://localhost:8000", "--archive-path", str(tmp_path)],
+        [
+            "user",
+            "--api-key",
+            "k",
+            "--site",
+            "http://localhost:8000",
+            "--archive-path",
+            str(tmp_path),
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -96,13 +106,17 @@ def test_user_writes_data_and_site(tmp_path, seen):
 
     assert result.exit_code == 0, result.output
     assert seen["user_id"] == 42
-    assert json.loads((tmp_path / "data.json").read_text())["pincushion_version"] == "1.0.0"
+    assert (
+        json.loads((tmp_path / "data.json").read_text())["pincushion_version"]
+        == "1.0.0"
+    )
     assert (tmp_path / "index.html").is_file()
 
 
 def test_collection_requires_id(tmp_path):
     result = CliRunner().invoke(
-        pincushion.cli, ["collection", "--api-key", "k", "--archive-path", str(tmp_path)]
+        pincushion.cli,
+        ["collection", "--api-key", "k", "--archive-path", str(tmp_path)],
     )
 
     assert result.exit_code == 2

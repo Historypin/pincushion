@@ -20,7 +20,7 @@
   {% elif media_type == 'audio' %}
   <audio src="media.mp3" controls></audio>
   {% elif media_type == 'text' %}
-  <p>{{ pin.description | safe }}</p>
+  <p>{{ (pin.description or '') | safe }}</p>
   {% endif %}
   </div>
 </section>
@@ -71,7 +71,7 @@
     <dt>Tags</dt>
     <dd>
       {% for tag in pin.tags %}
-      <a href="../../tags/{{ tag | tag_href }}">{{ tag }}</a>{{ ", " if not loop.last else "" }}
+      <a href="../../tags/{{ tag_files[tag] | urlencode }}.html">{{ tag }}</a>{{ ", " if not loop.last else "" }}
       {% endfor %}
     </dd>
     {% endif %}

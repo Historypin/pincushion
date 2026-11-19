@@ -14,7 +14,7 @@
   {% if collection.long_description %}
   {{ collection.long_description | safe }}
   {% else %}
-  {{ collection.short_description }}
+  {{ collection.short_description or '' }}
   {% endif %}
 </p>
 

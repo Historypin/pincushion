@@ -10,12 +10,17 @@ import requests
 import tqdm
 import yt_dlp
 
+from pincushion.historypin import HistorypinError
+
 if TYPE_CHECKING:
     from pincushion.historypin import Client
 
 logger = logging.getLogger(__name__)
 
 AUDIO_HOSTS = re.compile("soundcloud|audioboom")
+
+# statuses an expired signed link can get (GCS answers 400 ExpiredToken)
+REFUSED = {400, 401, 403}
 
 
 def media_type(pin: dict) -> str:
@@ -54,6 +59,7 @@ class MediaDownloader:
         self.client = client
         self.cookie_file = cookie_file
         self.overwrite = overwrite
+        self.refetched: set[int] = set()
 
     def fetch_image(self, url: str | None, rel_path: str) -> bool:
         """
@@ -70,10 +76,18 @@ class MediaDownloader:
         if media_type(pin) != "image":
             return
         rel_path = f"pins/{pin['id']}/image.jpg"
-        if self._fetch(pin.get("image_url"), rel_path) != 403 or self.client is None:
+        status = self._fetch(pin.get("image_url"), rel_path)
+        if status not in REFUSED or self.client is None or pin["id"] in self.refetched:
             return
+        # only once per pin per run, since each re-fetch costs a rate-limited
+        # API request and some refusals are from external hosts, not expiry
+        self.refetched.add(pin["id"])
         logger.info(f"image link for pin {pin['id']} was refused, getting a fresh one")
-        fresh = self.client.get(f"pins/{pin['id']}/")
+        try:
+            fresh = self.client.get(f"pins/{pin['id']}/")
+        except HistorypinError as e:
+            logger.error(f"unable to get a fresh image link for pin {pin['id']}: {e}")
+            return
         if self._fetch(fresh.get("image_url"), rel_path) != 200:
             logger.error(f"unable to download the image for pin {pin['id']}")
 

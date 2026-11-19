@@ -4,10 +4,9 @@ import json
 import logging
 import shutil
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from shutil import copytree, rmtree
-from urllib.parse import quote
 
 import jinja2
 import tqdm
@@ -25,14 +24,27 @@ def tag_filename(tag: str) -> str:
     return tag.replace("\0", "").replace("/", "-")
 
 
-def tag_href(tag: str) -> str:
-    return quote(tag_filename(tag)) + ".html"
+def tag_files(tags: Iterable[str]) -> dict[str, str]:
+    """
+    Map each tag to a file name that no other tag shares, even on a
+    case-insensitive filesystem, and that isn't the tags index page.
+    """
+    taken = {"index"}
+    files = {}
+    for tag in sorted(set(tags)):
+        base = tag_filename(tag)
+        name, n = base, 1
+        while name.lower() in taken:
+            n += 1
+            name = f"{base}-{n}"
+        taken.add(name.lower())
+        files[tag] = name
+    return files
 
 
 env = jinja2.Environment(
     loader=jinja2.PackageLoader("pincushion"), autoescape=jinja2.select_autoescape()
 )
-env.filters["tag_href"] = tag_href
 
 
 class ArchiveGenerator:
@@ -58,6 +70,9 @@ class ArchiveGenerator:
                 if coll_id in colls:
                     self.pins_by_collection[coll_id].append(pin)
                     self.collection_of.setdefault(pin["id"], colls[coll_id])
+        self.tag_files = tag_files(
+            tag for pin in self.pins for tag in pin.get("tags", [])
+        )
 
     def generate(self) -> None:
         if self.downloader is not None:
@@ -159,6 +174,7 @@ class ArchiveGenerator:
                 collection=self.collection_of.get(pin["id"]),
                 index_title=self.index_title,
                 title=pin["title"],
+                tag_files=self.tag_files,
             )
             self.write(html, "pins", str(pin["id"]), "index.html")
 
@@ -171,6 +187,7 @@ class ArchiveGenerator:
         html = env.get_template("tags.html").render(
             tags=sorted(tag_index.keys()),
             tag_index=tag_index,
+            tag_files=self.tag_files,
             index_title=self.index_title,
             title="Tags",
         )
@@ -185,7 +202,7 @@ class ArchiveGenerator:
                 index_title=self.index_title,
                 title=f"Tag {tag}",
             )
-            self.write(html, "tags", tag_filename(tag) + ".html")
+            self.write(html, "tags", self.tag_files[tag] + ".html")
 
     def write_map(self) -> None:
         geojson: dict = {"type": "FeatureCollection", "features": []}
@@ -242,7 +259,8 @@ class ArchiveGenerator:
     @property
     def index_title(self) -> str:
         if self.index_type == "user":
-            return self.data["member"]["name"]
+            member = self.data["member"]
+            return member.get("name") or f"Member {member['id']}"
         return self.data["collection"]["title"]
 
     @property

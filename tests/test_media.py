@@ -133,3 +133,52 @@ def test_pin_av_calls_ytdlp(tmp_path, monkeypatch):
     assert seen["params"]["outtmpl"]["default"].endswith("pins/7/media.%(ext)s")
     keys = [p["key"] for p in seen["params"]["postprocessors"]]
     assert "FFmpegVideoConvertor" in keys
+
+
+@responses.activate
+def test_pin_image_survives_failed_refetch(tmp_path, client, caplog):
+    responses.get("https://gcs.test/old.jpg", status=403)
+    responses.get(f"{SITE}/api/v1/pins/5/", status=404, json={"detail": "Not found."})
+    downloader = MediaDownloader(tmp_path, SITE, client=client)
+
+    with caplog.at_level(logging.ERROR):
+        downloader.pin_image(
+            {"id": 5, "type": "IMAGE", "image_url": "https://gcs.test/old.jpg"}
+        )
+
+    assert not (tmp_path / "pins/5/image.jpg").exists()
+    assert any("pin 5" in r.getMessage() for r in caplog.records)
+
+
+@responses.activate
+@pytest.mark.parametrize("status", [400, 401, 403])
+def test_pin_image_refetches_on_expired_statuses(tmp_path, client, status):
+    responses.get("https://gcs.test/old.jpg", status=status)
+    responses.get(
+        f"{SITE}/api/v1/pins/5/",
+        json={"id": 5, "image_url": "https://gcs.test/new.jpg"},
+    )
+    responses.get("https://gcs.test/new.jpg", body=b"fresh")
+
+    MediaDownloader(tmp_path, SITE, client=client).pin_image(
+        {"id": 5, "type": "IMAGE", "image_url": "https://gcs.test/old.jpg"}
+    )
+
+    assert (tmp_path / "pins/5/image.jpg").read_bytes() == b"fresh"
+
+
+@responses.activate
+def test_pin_image_refetches_at_most_once_per_run(tmp_path, client):
+    responses.get("https://img.test/dead.jpg", status=403)
+    responses.get(
+        f"{SITE}/api/v1/pins/5/",
+        json={"id": 5, "image_url": "https://img.test/dead.jpg"},
+    )
+    downloader = MediaDownloader(tmp_path, SITE, client=client)
+    pin = {"id": 5, "type": "IMAGE", "image_url": "https://img.test/dead.jpg"}
+
+    downloader.pin_image(pin)
+    downloader.pin_image(pin)
+
+    pin_calls = [c for c in responses.calls if c.request.url.endswith("/pins/5/")]
+    assert len(pin_calls) == 1

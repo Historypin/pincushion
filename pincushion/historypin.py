@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_SITE = "https://historypin.org"
 EXPORT_CAP = 10000
 DEFAULT_RETRY_AFTER = 60
+TIMEOUT = 60
+# attempts for a server error or a network failure, with backoff between
+ATTEMPTS = 3
 DATA_VERSION = "1.0.0"
 
 
@@ -73,6 +76,12 @@ class Client:
         """
         return self.last_count == EXPORT_CAP
 
+    def _back_off(self, failures: int, problem: str) -> None:
+        wait = 10 * 2 ** (failures - 1)
+        logger.warning(f"{problem}, retrying in {wait} seconds")
+        click.echo(f"{problem.capitalize()}, retrying in {wait} seconds", err=True)
+        time.sleep(wait)
+
     def _on_site(self, url: str) -> str:
         # A proxy can make the API build next links with an internal host or
         # http scheme, so request the same path on the configured site.
@@ -81,16 +90,30 @@ class Client:
         return f"{self.site}{parts.path}{query}"
 
     def _get(self, url: str, params: dict | None) -> dict:
+        failures = 0
         while True:
             time.sleep(self.pause)
             logger.info(f"fetching {url} {params or ''}")
-            resp = self.session.get(url, params=params)
-            if resp.status_code != 429:
-                break
-            wait = int(resp.headers.get("Retry-After", DEFAULT_RETRY_AFTER))
-            logger.warning(f"rate limited, waiting {wait} seconds")
-            click.echo(f"Rate limited, waiting {wait} seconds", err=True)
-            time.sleep(wait)
+            try:
+                resp = self.session.get(url, params=params, timeout=TIMEOUT)
+            except requests.RequestException as e:
+                failures += 1
+                if failures >= ATTEMPTS:
+                    raise HistorypinError(f"Couldn't reach {self.site}: {e}") from e
+                self._back_off(failures, f"couldn't reach {self.site}")
+                continue
+            if resp.status_code == 429:
+                wait = int(resp.headers.get("Retry-After", DEFAULT_RETRY_AFTER))
+                logger.warning(f"rate limited, waiting {wait} seconds")
+                click.echo(f"Rate limited, waiting {wait} seconds", err=True)
+                time.sleep(wait)
+                continue
+            if resp.status_code >= 500:
+                failures += 1
+                if failures < ATTEMPTS:
+                    self._back_off(failures, f"{resp.status_code} from {url}")
+                    continue
+            break
 
         if resp.status_code == 200:
             return resp.json()
@@ -114,7 +137,11 @@ def fetch_user(
     # a regular key already only lists the collections its owner owns or
     # manages; for anyone else the API can only filter by owner
     params = {} if user_id is None else {"owner": user_id}
-    data["collections"] = _fetch_collections(client, downloader, data, params)
+    # A staff key's unfiltered list has every collection on the site, so keep
+    # only the collections that hold the member's pins. Collections without
+    # them would never be shown anyway.
+    wanted = {cid for pin in data["pins"] for cid in pin.get("collection_ids", [])}
+    data["collections"] = _fetch_collections(client, downloader, data, params, wanted)
     return data
 
 
@@ -200,10 +227,16 @@ def _fetch_pins(
 
 
 def _fetch_collections(
-    client: Client, downloader: MediaDownloader | None, data: dict, params: dict
+    client: Client,
+    downloader: MediaDownloader | None,
+    data: dict,
+    params: dict,
+    wanted: set[int] | None = None,
 ) -> list[dict]:
     collections: list[dict] = []
     for results in _pages(client, "collections/", params, data, "collections"):
+        if wanted is not None:
+            results = [coll for coll in results if coll["id"] in wanted]
         if downloader is not None:
             for coll in results:
                 downloader.fetch_image(

@@ -30,7 +30,10 @@ def query(**params):
 
 @responses.activate
 def test_fetch_user_self(client, downloader):
-    pins = [{"id": 1, "type": "IMAGE"}, {"id": 2, "type": "TEXT"}]
+    pins = [
+        {"id": 1, "type": "IMAGE", "collection_ids": [3]},
+        {"id": 2, "type": "TEXT", "collection_ids": []},
+    ]
     collections = [{"id": 3, "banner_image_url": None}]
     responses.get(f"{API}/members/me/", json=MEMBER)
     responses.get(f"{API}/pins/", json=page(pins), match=query(creator=42))
@@ -95,7 +98,9 @@ def test_images_downloaded_before_next_page(client):
 @responses.activate
 def test_member_and_banner_images_fetched(client, downloader):
     responses.get(f"{API}/members/me/", json=MEMBER)
-    responses.get(f"{API}/pins/", json=page([]))
+    responses.get(
+        f"{API}/pins/", json=page([{"id": 1, "type": "TEXT", "collection_ids": [3]}])
+    )
     responses.get(
         f"{API}/collections/",
         json=page([{"id": 3, "banner_image_url": "https://img.test/b.jpg"}]),
@@ -207,3 +212,30 @@ def test_root_banner_is_index_image(client, downloader):
     fetch_collection(client, downloader, 1)
 
     assert ("image", "https://img.test/root.jpg", "index.jpg") in downloader.log
+
+
+@responses.activate
+def test_own_archive_keeps_only_collections_with_its_pins(client, downloader):
+    # a staff key's unfiltered /collections/ lists every collection on the site
+    responses.get(f"{API}/members/me/", json=MEMBER)
+    responses.get(
+        f"{API}/pins/", json=page([{"id": 1, "type": "TEXT", "collection_ids": [3]}])
+    )
+    responses.get(
+        f"{API}/collections/",
+        json=page(
+            [
+                {"id": 3, "banner_image_url": "https://img.test/3.jpg"},
+                {"id": 5, "banner_image_url": "https://img.test/5.jpg"},
+            ]
+        ),
+    )
+
+    data = fetch_user(client, downloader)
+
+    assert [c["id"] for c in data["collections"]] == [3]
+    assert (
+        "image",
+        "https://img.test/5.jpg",
+        "collections/5/image.jpg",
+    ) not in downloader.log

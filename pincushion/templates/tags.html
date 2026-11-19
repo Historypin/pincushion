@@ -13,7 +13,7 @@
 <div class="tags">
 {% for tag in tags %}
 <div class="tag">
-  <a href="{{ tag | tag_href }}">
+  <a href="{{ tag_files[tag] | urlencode }}.html">
     {{ tag }}
   </a> 
   ({{ tag_index[tag]|length }})

@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 import pytest
 
-from pincushion.archive import ArchiveGenerator, tag_filename
+from pincushion.archive import ArchiveGenerator, tag_filename, tag_files
 
 FIXTURE = Path(__file__).parent / "data" / "archive" / "data.json"
 
@@ -132,3 +132,40 @@ def test_collection_archive_index(tmp_path):
     ArchiveGenerator(tmp_path).generate()
 
     assert "Root collection" in read(tmp_path, "index.html")
+
+
+def test_colliding_tags_get_distinct_files(tmp_path):
+    archive = make_archive(tmp_path)
+    data = json.loads((archive / "data.json").read_text())
+    tags = ["Paris", "paris", "a/b", "a-b", "index"]
+    for pin, tag in zip(data["pins"], tags):
+        pin["tags"] = [tag]
+    (archive / "data.json").write_text(json.dumps(data))
+
+    ArchiveGenerator(archive).generate()
+
+    files = tag_files(tags)
+    assert len({name.lower() for name in files.values()}) == len(tags)
+    assert "index" not in {name.lower() for name in files.values()}
+    for pin, tag in zip(data["pins"], tags):
+        page = read(archive, "pins", str(pin["id"]), "index.html")
+        assert f'href="../../tags/{quote(files[tag])}.html"' in page
+        assert tag in read(archive, "tags", f"{files[tag]}.html")
+    assert "Pins that are tagged" not in read(archive, "tags", "index.html")
+
+
+def test_null_fields_do_not_render_none(tmp_path):
+    archive = make_archive(tmp_path)
+    data = json.loads((archive / "data.json").read_text())
+    data["member"]["name"] = None
+    data["member"]["about"] = None
+    data["pins"][2]["description"] = None
+    data["collections"][1]["long_description"] = None
+    data["collections"][1]["short_description"] = None
+    (archive / "data.json").write_text(json.dumps(data))
+
+    ArchiveGenerator(archive).generate()
+
+    for page in ["index.html", "pins/12/index.html", "collections/4/index.html"]:
+        assert ">None<" not in read(archive, page), page
+        assert "None</" not in read(archive, page), page

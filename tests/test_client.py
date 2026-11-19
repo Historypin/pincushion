@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import requests
 import responses
 
 from pincushion import historypin
@@ -118,3 +119,39 @@ def test_429_without_retry_after_waits_60(client, sleeps):
 
     assert client.get("pins/") == {"ok": True}
     assert 60 in sleeps
+
+
+@responses.activate
+def test_server_error_is_retried(client, sleeps):
+    responses.get(f"{API}/pins/", status=502)
+    responses.get(f"{API}/pins/", json={"ok": True})
+
+    assert client.get("pins/") == {"ok": True}
+
+
+@responses.activate
+def test_connection_error_retried_then_reported(client, sleeps):
+    responses.get(f"{API}/pins/", body=requests.ConnectionError("down"))
+
+    with pytest.raises(HistorypinError) as e:
+        client.get("pins/")
+
+    assert "Couldn't reach" in str(e.value)
+    assert len(responses.calls) == 3
+
+
+@responses.activate
+def test_requests_have_a_timeout(client, monkeypatch):
+    seen = {}
+    original = client.session.get
+
+    def get(*args, **kwargs):
+        seen.update(kwargs)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(client.session, "get", get)
+    responses.get(f"{API}/pins/", json={})
+
+    client.get("pins/")
+
+    assert seen.get("timeout")

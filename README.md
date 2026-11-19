@@ -73,14 +73,14 @@ pincushion user --archive-path my-archive
 
 Open `my-archive/index.html` in your browser.
 
-The map's background tiles come from OpenStreetMap, whose servers only answer pages that are served from a web server. Opened straight from the file, the map shows "Access blocked" tiles, although the pins on it still work. To see the full map, serve the archive, for example with Python:
+The whole archive works offline, including the map, which draws coastlines and country borders from [Natural Earth](https://www.naturalearthdata.com/) data stored in the archive. When you serve the archive from a web server and you're online, the map also shows OpenStreetMap's street-level detail. OpenStreetMap's servers don't answer pages opened straight from a file. To serve the archive with Python:
 
 ```shell
 cd my-archive
 python3 -m http.server
 ```
 
-Then open <http://localhost:8000/>. Everything else in the archive works without a web server or an Internet connection.
+Then open <http://localhost:8000/>.
 
 Create an archive of a collection and all its sub-collections, using the collection's ID (the number in its Historypin URL, as in `/collections/1234/`):
 

@@ -1,10 +1,10 @@
 [project]
 name = "pincushion"
-version = "0.5.0"
+version = "0.5.1"
 description = "An archiving tool for Historypin"
 readme = "README.md"
 requires-python = ">=3.9"
-repository = "https://github.com/edsu/pincushion"
+repository = "https://github.com/historypin/pincushion"
 dependencies = [
     "requests>=2.32.3",
     "tqdm>=4.66.5",

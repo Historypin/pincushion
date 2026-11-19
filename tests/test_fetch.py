@@ -5,7 +5,7 @@ import json
 import responses
 from responses import matchers
 
-from pincushion.historypin import fetch_user
+from pincushion.historypin import fetch_collection, fetch_user
 from tests.conftest import API, FakeDownloader, page
 
 DATA_KEYS = {
@@ -108,3 +108,83 @@ def test_truncated_recorded(client, downloader, capsys):
 
 def _json(body):
     return json.dumps(body)
+
+
+def coll(id, child_ids=(), pin_ids=(), banner=None):
+    return {
+        "id": id,
+        "child_ids": list(child_ids),
+        "pin_ids": list(pin_ids),
+        "banner_image_url": banner,
+    }
+
+
+def pin(id):
+    return {"id": id, "type": "TEXT"}
+
+
+def serve_tree(collections: dict, children: dict, pins: dict):
+    """Register the detail, ?parent= and ?collections= endpoints for a tree."""
+    for cid, record in collections.items():
+        responses.get(f"{API}/collections/{cid}/", json=record)
+        responses.get(
+            f"{API}/collections/",
+            json=page([collections[c] for c in children.get(cid, [])]),
+            match=query(parent=cid),
+        )
+        responses.get(
+            f"{API}/pins/",
+            json=page([pin(p) for p in pins.get(cid, [])]),
+            match=query(collections=cid),
+        )
+
+
+@responses.activate
+def test_walks_tree_breadth_first_with_dedupe(client, downloader):
+    collections = {
+        1: coll(1, [2, 3], [10]),
+        2: coll(2, [4], [10]),
+        3: coll(3, [4], [11]),
+        4: coll(4, [], [12]),
+    }
+    serve_tree(collections, {1: [2, 3], 2: [4], 3: [4]}, {1: [10], 2: [10], 3: [11], 4: [12]})
+
+    data = fetch_collection(client, downloader, 1)
+
+    assert data["type"] == "collection"
+    assert data["member"] is None
+    assert data["collection"] == collections[1]
+    assert [c["id"] for c in data["collections"]] == [2, 3, 4]
+    assert [p["id"] for p in data["pins"]] == [10, 11, 12]
+    assert data["partial"] is None
+
+
+@responses.activate
+def test_cycle_terminates(client, downloader):
+    collections = {1: coll(1, [2]), 2: coll(2, [1])}
+    serve_tree(collections, {1: [2], 2: [1]}, {})
+
+    data = fetch_collection(client, downloader, 1)
+
+    assert [c["id"] for c in data["collections"]] == [2]
+    assert data["partial"] is None
+
+
+@responses.activate
+def test_partial_counts(client, downloader, capsys):
+    collections = {1: coll(1, [2, 5], [10, 11, 12]), 2: coll(2)}
+    serve_tree(collections, {1: [2]}, {1: [10, 11]})
+
+    data = fetch_collection(client, downloader, 1)
+
+    assert data["partial"] == {"collections_missing": 1, "pins_missing": 1}
+    assert "leaves out" in capsys.readouterr().err
+
+
+@responses.activate
+def test_root_banner_is_index_image(client, downloader):
+    serve_tree({1: coll(1, banner="https://img.test/root.jpg")}, {}, {})
+
+    fetch_collection(client, downloader, 1)
+
+    assert ("image", "https://img.test/root.jpg", "index.jpg") in downloader.log

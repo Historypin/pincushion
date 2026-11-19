@@ -118,6 +118,54 @@ def fetch_user(
     return data
 
 
+def fetch_collection(
+    client: Client, downloader: MediaDownloader | None, collection_id: int
+) -> dict:
+    """
+    Fetch a collection, its descendant collections and all their pins,
+    walking the tree breadth first. Media is downloaded as it arrives.
+    """
+    root = client.get(f"collections/{collection_id}/")
+    data = _new_data("collection", client.site)
+    data["collection"] = root
+    if downloader is not None:
+        downloader.fetch_image(root.get("banner_image_url"), "index.jpg")
+
+    # collections can be nested in more than one place, and in principle
+    # can form cycles, so remember which ones have been seen
+    seen = {root["id"]}
+    queue = [root]
+    pins: dict[int, dict] = {}
+    while queue:
+        coll = queue.pop(0)
+        for pin in _fetch_pins(client, downloader, data, {"collections": coll["id"]}):
+            pins.setdefault(pin["id"], pin)
+        for child in _fetch_collections(client, downloader, data, {"parent": coll["id"]}):
+            if child["id"] not in seen:
+                seen.add(child["id"])
+                data["collections"].append(child)
+                queue.append(child)
+    data["pins"] = list(pins.values())
+
+    # a regular key can't see other members' pins or collections it doesn't
+    # manage, but each collection's child_ids and pin_ids list everything
+    fetched = [root, *data["collections"]]
+    missing_collections = {c for coll in fetched for c in coll.get("child_ids", [])} - seen
+    missing_pins = {p for coll in fetched for p in coll.get("pin_ids", [])} - pins.keys()
+    if missing_collections or missing_pins:
+        data["partial"] = {
+            "collections_missing": len(missing_collections),
+            "pins_missing": len(missing_pins),
+        }
+        click.echo(
+            f"Warning: the archive leaves out {len(missing_collections)} collections "
+            f"and {len(missing_pins)} pins that this API key can't see. Archiving "
+            "a whole collection needs a staff key.",
+            err=True,
+        )
+    return data
+
+
 def _new_data(kind: str, site: str) -> dict:
     return {
         "pincushion_version": DATA_VERSION,

@@ -40,7 +40,7 @@
 <div id="map"></div>
 <script>
   let pins = {{ geojson | safe }};
-  let map = L.map('map', {zoomSnap: 0.5, worldCopyJump: true});
+  let map = L.map('map', {zoomSnap: 0.5, worldCopyJump: true, maxZoom: 18});
 
   // The basemap is drawn from data in basemap.js, so the map works offline
   // and from a file.

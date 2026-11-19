@@ -199,3 +199,8 @@ def test_map_has_an_offline_basemap(archive):
     assert '<script src="basemap.js"></script>' in page
     assert "window.PINCUSHION_BASEMAP" in page
     assert "Natural Earth" in page
+
+
+def test_map_sets_its_own_max_zoom(archive):
+    # the cluster plugin needs one, and offline there's no tile layer to give it
+    assert "maxZoom: 18" in read(archive, "map", "index.html")

@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+import logging
+import re
+from pathlib import Path
+from typing import TYPE_CHECKING
+from urllib.parse import urljoin
+
+import requests
+import tqdm
+import yt_dlp
+
+if TYPE_CHECKING:
+    from pincushion.historypin import Client
+
+logger = logging.getLogger(__name__)
+
+AUDIO_HOSTS = re.compile("soundcloud|audioboom")
+
+
+def media_type(pin: dict) -> str:
+    """
+    Return image, video, audio or text for a pin.
+    """
+    kind = (pin.get("type") or "").lower()
+    # some video pins are really from audio sites
+    if kind == "video" and AUDIO_HOSTS.search(pin.get("video_url") or ""):
+        return "audio"
+    return kind if kind in ("image", "video", "audio") else "text"
+
+
+def media_url(pin: dict) -> str | None:
+    """
+    Return the URL of a pin's primary media.
+    """
+    return pin.get("image_url") or pin.get("video_url") or pin.get("audio_url")
+
+
+class MediaDownloader:
+    """
+    Downloads images and audio/video into an archive directory.
+    """
+
+    def __init__(
+        self,
+        archive_dir: Path,
+        site: str,
+        client: Client | None = None,
+        cookie_file: str | None = None,
+        overwrite: bool = False,
+    ):
+        self.archive_dir = archive_dir
+        self.site = site.rstrip("/")
+        self.client = client
+        self.cookie_file = cookie_file
+        self.overwrite = overwrite
+
+    def fetch_image(self, url: str | None, rel_path: str) -> bool:
+        """
+        Download an image to a path in the archive, and return whether the
+        file is now there.
+        """
+        return self._fetch(url, rel_path) == 200
+
+    def pin_image(self, pin: dict) -> None:
+        """
+        Download an image pin's image. Image links can be signed and expire,
+        so if one is refused, get the pin again for a fresh link and retry once.
+        """
+        if media_type(pin) != "image":
+            return
+        rel_path = f"pins/{pin['id']}/image.jpg"
+        if self._fetch(pin.get("image_url"), rel_path) != 403 or self.client is None:
+            return
+        logger.info(f"image link for pin {pin['id']} was refused, getting a fresh one")
+        fresh = self.client.get(f"pins/{pin['id']}/")
+        if self._fetch(fresh.get("image_url"), rel_path) != 200:
+            logger.error(f"unable to download the image for pin {pin['id']}")
+
+    def pin_images(self, pins: list[dict]) -> None:
+        for pin in pins:
+            self.pin_image(pin)
+
+    def pin_av(self, pin: dict) -> None:
+        """
+        Download a video or audio pin's media with yt-dlp.
+        """
+        kind = media_type(pin)
+        if kind not in ("video", "audio"):
+            return
+        url = pin.get("video_url") or pin.get("audio_url")
+        if not url:
+            logger.error(f"pin {pin['id']} has no media link")
+            return
+
+        path = self.archive_dir / "pins" / str(pin["id"]) / "media.%(ext)s"
+        present = path.with_suffix(".mp3").is_file() or path.with_suffix(".mp4").is_file()
+        if present and not self.overwrite:
+            logger.info(f"skipping download of {url} since it is already present")
+            return
+
+        logger.info(f"downloading media {url} to {path}")
+        opts: dict = {
+            "noprogress": True,
+            "quiet": True,
+            "logger": logger,
+            "format": "best/bestvideo+bestaudio",
+            "audio_format": "mp3",
+            "outtmpl": {"default": str(path)},
+        }
+
+        # convert to mp3 or mp4 if needed
+        if kind == "video":
+            opts["postprocessors"] = [{"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}]
+        else:
+            opts["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3"}]
+
+        # optionally use cookies to download video
+        if self.cookie_file:
+            opts["cookiefile"] = self.cookie_file
+
+        with yt_dlp.YoutubeDL(params=opts) as ydl:
+            try:
+                ydl.extract_info(url)
+            except yt_dlp.utils.DownloadError as e:
+                logger.error(f"Unable to download media {url}: {e}")
+
+    def all_pin_av(self, pins: list[dict], progress: bool = True) -> None:
+        av_pins = [pin for pin in pins if media_type(pin) in ("video", "audio")]
+        for pin in tqdm.tqdm(av_pins, desc=f"{'audio/video':20}", disable=not progress):
+            self.pin_av(pin)
+
+    def _fetch(self, url: str | None, rel_path: str) -> int | None:
+        """
+        Download url to rel_path, returning the HTTP status (200 when the
+        file is already present) or None when there is no URL.
+        """
+        if not url:
+            return None
+        path = self.archive_dir / rel_path
+        if path.is_file() and not self.overwrite:
+            logger.info(f"skipping download of {url} since it is already present")
+            return 200
+
+        url = urljoin(self.site + "/", url)
+        logger.info(f"saving {url} to {path}")
+        try:
+            resp = requests.get(url, timeout=60)
+        except requests.RequestException as e:
+            logger.error(f"unable to fetch {url}: {e}")
+            return None
+        if resp.status_code == 200:
+            path.parent.mkdir(exist_ok=True, parents=True)
+            path.write_bytes(resp.content)
+        else:
+            logger.error(f"received {resp.status_code} when fetching {url}")
+        return resp.status_code

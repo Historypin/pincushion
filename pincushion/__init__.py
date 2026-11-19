@@ -134,7 +134,7 @@ def collection_data(slug: str, output: TextIOWrapper):
     help="use a cookie file to download video, see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp",
     type=click.Path(exists=True, dir_okay=False),
 )
-def media(archive_path: str, cookie_file: click.Path):
+def media_command(archive_path: str, cookie_file: click.Path):
     """
     Download the media for a given archive. This can be useful for testing.
     """

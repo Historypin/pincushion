@@ -182,3 +182,53 @@ def test_pin_image_refetches_at_most_once_per_run(tmp_path, client):
 
     pin_calls = [c for c in responses.calls if c.request.url.endswith("/pins/5/")]
     assert len(pin_calls) == 1
+
+
+@responses.activate
+def test_pin_images_reports_progress_per_pin(tmp_path):
+    log = []
+    for n in (1, 2):
+        responses.add_callback(
+            responses.GET,
+            f"https://img.test/{n}.jpg",
+            callback=lambda req: (log.append(("get", req.url)), (200, {}, b"x"))[1],
+        )
+    pins = [
+        {"id": n, "type": "IMAGE", "image_url": f"https://img.test/{n}.jpg"}
+        for n in (1, 2)
+    ]
+
+    MediaDownloader(tmp_path, SITE).pin_images(pins, progress=log.append)
+
+    assert log == [
+        ("get", "https://img.test/1.jpg"),
+        1,
+        ("get", "https://img.test/2.jpg"),
+        1,
+    ]
+
+
+@responses.activate
+def test_downloads_identify_pincushion(tmp_path):
+    responses.get("https://img.test/a.jpg", body=b"x")
+
+    MediaDownloader(tmp_path, SITE).fetch_image("https://img.test/a.jpg", "a.jpg")
+
+    user_agent = responses.calls[0].request.headers["User-Agent"]
+    assert user_agent.startswith("pincushion/")
+    assert "github.com/historypin/pincushion" in user_agent
+
+
+@responses.activate
+def test_pause_between_downloads(tmp_path, monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(media.time, "sleep", sleeps.append)
+    responses.get("https://img.test/a.jpg", body=b"x")
+    responses.get("https://img.test/b.jpg", body=b"x")
+    downloader = MediaDownloader(tmp_path, SITE, pause=0.25)
+
+    downloader.fetch_image("https://img.test/a.jpg", "a.jpg")
+    downloader.fetch_image("https://img.test/b.jpg", "b.jpg")
+    downloader.fetch_image("https://img.test/a.jpg", "a.jpg")  # already present
+
+    assert sleeps == [0.25, 0.25]

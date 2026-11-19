@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import re
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
@@ -10,7 +12,7 @@ import requests
 import tqdm
 import yt_dlp
 
-from pincushion.historypin import HistorypinError
+from pincushion.historypin import USER_AGENT, HistorypinError
 
 if TYPE_CHECKING:
     from pincushion.historypin import Client
@@ -53,6 +55,7 @@ class MediaDownloader:
         client: Client | None = None,
         cookie_file: str | None = None,
         overwrite: bool = False,
+        pause: float = 0.25,
     ):
         self.archive_dir = archive_dir
         self.site = site.rstrip("/")
@@ -60,6 +63,8 @@ class MediaDownloader:
         self.cookie_file = cookie_file
         self.overwrite = overwrite
         self.refetched: set[int] = set()
+        # a short pause between downloads, to be gentle on image hosts
+        self.pause = pause
 
     def fetch_image(self, url: str | None, rel_path: str) -> bool:
         """
@@ -91,9 +96,13 @@ class MediaDownloader:
         if self._fetch(fresh.get("image_url"), rel_path) != 200:
             logger.error(f"unable to download the image for pin {pin['id']}")
 
-    def pin_images(self, pins: list[dict]) -> None:
+    def pin_images(
+        self, pins: list[dict], progress: Callable[[int], object] | None = None
+    ) -> None:
         for pin in pins:
             self.pin_image(pin)
+            if progress is not None:
+                progress(1)
 
     def pin_av(self, pin: dict) -> None:
         """
@@ -165,7 +174,8 @@ class MediaDownloader:
         url = urljoin(self.site + "/", url)
         logger.info(f"saving {url} to {path}")
         try:
-            resp = requests.get(url, timeout=60)
+            time.sleep(self.pause)
+            resp = requests.get(url, timeout=60, headers={"User-Agent": USER_AGENT})
         except requests.RequestException as e:
             logger.error(f"unable to fetch {url}: {e}")
             return None

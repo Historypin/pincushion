@@ -155,3 +155,12 @@ def test_requests_have_a_timeout(client, monkeypatch):
     client.get("pins/")
 
     assert seen.get("timeout")
+
+
+@responses.activate
+def test_api_requests_identify_pincushion(client):
+    responses.get(f"{API}/members/me/", json={})
+
+    client.get("members/me/")
+
+    assert responses.calls[0].request.headers["User-Agent"].startswith("pincushion/")

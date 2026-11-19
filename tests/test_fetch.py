@@ -5,6 +5,7 @@ import json
 import responses
 from responses import matchers
 
+from pincushion import historypin
 from pincushion.historypin import fetch_collection, fetch_user
 from tests.conftest import API, FakeDownloader, page
 
@@ -239,3 +240,36 @@ def test_own_archive_keeps_only_collections_with_its_pins(client, downloader):
         "https://img.test/5.jpg",
         "collections/5/image.jpg",
     ) not in downloader.log
+
+
+@responses.activate
+def test_pin_progress_advances_per_pin(client, monkeypatch):
+    updates = []
+
+    class FakeBar:
+        def __init__(self, *args, desc="", **kwargs):
+            self.desc = desc.strip()
+
+        def update(self, n):
+            if self.desc == "pins":
+                updates.append(n)
+
+        def close(self):
+            pass
+
+    class CountingDownloader(FakeDownloader):
+        def pin_images(self, pins, progress=None):
+            for _ in pins:
+                progress(1)
+
+    monkeypatch.setattr(historypin.tqdm, "tqdm", FakeBar)
+    responses.get(f"{API}/members/me/", json=MEMBER)
+    responses.get(
+        f"{API}/pins/",
+        json=page([{"id": n, "type": "TEXT"} for n in (1, 2, 3)]),
+    )
+    responses.get(f"{API}/collections/", json=page([]))
+
+    fetch_user(client, CountingDownloader())
+
+    assert updates == [1, 1, 1]

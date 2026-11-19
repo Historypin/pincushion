@@ -23,6 +23,8 @@ TIMEOUT = 60
 # attempts for a server error or a network failure, with backoff between
 ATTEMPTS = 3
 DATA_VERSION = "0.6.0"
+# identify pincushion to Historypin and to the sites media is downloaded from
+USER_AGENT = f"pincushion/{DATA_VERSION} (+https://github.com/historypin/pincushion)"
 
 
 class HistorypinError(Exception):
@@ -40,6 +42,7 @@ class Client:
         self.last_count: int | None = None
         self.session = requests.Session()
         self.session.headers["Authorization"] = f"Bearer {api_key}"
+        self.session.headers["User-Agent"] = USER_AGENT
 
     def get(self, path: str, params: dict | None = None) -> dict:
         """
@@ -218,10 +221,13 @@ def _fetch_pins(
     client: Client, downloader: MediaDownloader | None, data: dict, params: dict
 ) -> list[dict]:
     pins: list[dict] = []
-    for results in _pages(client, "pins/", params, data, "pins"):
-        # download each page's images now, before their links can expire
+    for results, bar in _pages(client, "pins/", params, data, "pins"):
+        # download each page's images now, before their links can expire,
+        # moving the progress bar as each one is done
         if downloader is not None:
-            downloader.pin_images(results)
+            downloader.pin_images(results, progress=bar.update)
+        else:
+            bar.update(len(results))
         pins.extend(results)
     return pins
 
@@ -234,7 +240,8 @@ def _fetch_collections(
     wanted: set[int] | None = None,
 ) -> list[dict]:
     collections: list[dict] = []
-    for results in _pages(client, "collections/", params, data, "collections"):
+    for results, bar in _pages(client, "collections/", params, data, "collections"):
+        bar.update(len(results))
         if wanted is not None:
             results = [coll for coll in results if coll["id"] in wanted]
         if downloader is not None:
@@ -248,17 +255,16 @@ def _fetch_collections(
 
 def _pages(
     client: Client, path: str, params: dict, data: dict, desc: str
-) -> Iterator[list[dict]]:
+) -> Iterator[tuple[list[dict], tqdm.tqdm]]:
     """
-    Yield the pages of a list with a progress bar, and record in data if
-    the list reached the export cap.
+    Yield the pages of a list along with its progress bar, which the caller
+    moves, and record in data if the list reached the export cap.
     """
     bar = None
     for results in client.pages(path, params):
         if bar is None:
             bar = tqdm.tqdm(desc=f"{desc:20}", total=client.last_count, leave=True)
-        yield results
-        bar.update(len(results))
+        yield results, bar
     if bar is not None:
         bar.close()
 

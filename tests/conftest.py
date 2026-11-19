@@ -30,8 +30,17 @@ class FakeDownloader:
         self.log.append(("image", url, rel_path))
         return True
 
-    def pin_images(self, pins):
+    def pin_images(self, pins, progress=None):
         self.log.append(("images", [pin["id"] for pin in pins]))
+
+
+@pytest.fixture(autouse=True)
+def no_media_pause(monkeypatch):
+    """Skip MediaDownloader's pause between downloads, except where a test
+    patches sleep itself."""
+    from pincushion import media
+
+    monkeypatch.setattr(media.time, "sleep", lambda seconds: None)
 
 
 @pytest.fixture

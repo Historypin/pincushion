@@ -20,11 +20,13 @@ jobs:
       - name: Lint
         uses: astral-sh/ruff-action@v2
         with:
+          version: "0.17.6"
           args: 'check'
 
       - name: Format
         uses: astral-sh/ruff-action@v2
         with:
+          version: "0.17.6"
           args: 'format --check'
 
       - name: Install uv

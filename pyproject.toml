@@ -27,6 +27,8 @@ dev-dependencies = [
     "types-requests>=2.32.0.20240914",
     "types-tqdm>=4.66.0.20240417",
     "hatch>=1.13.0",
+    "responses>=0.25",
+    "ruff==0.17.6",
 ]
 
 [tool.hatch.build.targets.wheel]

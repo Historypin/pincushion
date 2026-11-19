@@ -2,20 +2,19 @@
 {% from "gallery.html" import pin_gallery %}
 
 {% block breadcrumb %}
-<ul>
-  <li><a href="../index.html">{{ index_title }}</a></li>
-  <li><a href="index.html">Tags</a></li>
-  <li>{{ tag }}</li>
-</ul>
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="index.html">Tags</a></li>
+    <li>{{ tag }}</li>
+  </ol>
+</nav>
 {% endblock %}
 
 {% block main %}
 
-<p>
-Pins that are tagged with <strong><em>{{ tag }}</em></strong>.
-See <a href="index.html">all</a> tags.
-</p>
+<h1>{{ tag }}</h1>
+<p class="count">{{ pins | length | plural("pin") }} tagged “{{ tag }}”</p>
 
-{{ pin_gallery(pins, media, "../") }}
+{{ pin_gallery(pins, media, root) }}
 
 {% endblock %}

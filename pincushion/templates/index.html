@@ -1,50 +1,30 @@
 {% extends "base.html" %}
-{% from "gallery.html" import pin_gallery %}
+{% from "gallery.html" import pin_gallery, collection_gallery %}
 
 {% block main %}
 
-<section class="profile">
-  {% if has_image %}
-  <div class="media">
-    <img alt="{{ title }}" src="index.jpg">
-  </div>
-  {% endif %}
-  <h1>{{ title }}</h1>
-  <p>
-    {{ description | safe }}
-  </p>
-</section>
+<h1>{{ title }}</h1>
 
-{% if partial %}
-<p class="notice">
-  This archive leaves out {{ partial.collections_missing }} collections and
-  {{ partial.pins_missing }} pins that the API key used to make it couldn't see.
-</p>
+{% if has_image %}
+<div class="object portrait">
+  <img alt="" src="index.jpg">
+</div>
 {% endif %}
 
-{% if truncated %}
-<p class="notice">
-  Some lists reached the Historypin API's limit of 10,000 items, so this
-  archive may be missing items from them.
-</p>
+{% if description %}
+<div class="prose">
+  {{ description | safe }}
+</div>
 {% endif %}
 
 {% if collections %}
-<section class="gallery">
-  {% for coll in collections %}
-  <a href="collections/{{ coll.id }}/index.html">
-  <div class="gallery-item">
-    <div class="name">{{ coll.title }}</div>
-    <img src="collections/{{ coll.id }}/image.jpg">
-  </div>
-  </a>
-  {% endfor %}
-</section>
+<h2>Collections</h2>
+{{ collection_gallery(collections, root) }}
 {% endif %}
 
 {% if pins %}
-<h2>Pins</h2>
-{{ pin_gallery(pins, media, "", "gallery pins") }}
+{% if collections %}<h2>Other pins</h2>{% endif %}
+{{ pin_gallery(pins, media, root, "gallery pins") }}
 {% endif %}
 
 {% endblock %}

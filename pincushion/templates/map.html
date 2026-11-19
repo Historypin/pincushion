@@ -1,27 +1,29 @@
 {% extends "base.html" %}
 
-{% block breadcrumb %}
-<ul>
-  <li><a href="../index.html">{{ index_title }}</a></li>
-  <li>Map</li>
-</ul>
-{% endblock %}
-
 {% block head %}
 <link rel="stylesheet" href="leaflet/leaflet.css">
 <link rel="stylesheet" href="leaflet/leaflet.markercluster/MarkerCluster.css">
 <link rel="stylesheet" href="leaflet/leaflet.markercluster/MarkerCluster.Default.css">
 <script src="leaflet/leaflet.js"></script>
 <script src="leaflet/leaflet.markercluster/leaflet.markercluster.js"></script>
+{% endblock %}
+
+{% block style %}
 <style>
 #map {
   width: 100%;
-  min-height: 95vh;
+  height: 75vh;
+  margin-top: 1rem;
+}
+
+.leaflet-popup-content {
+  font-family: var(--sans);
 }
 </style>
 {% endblock %}
 
 {% block main %}
+<h1>Map</h1>
 <div id="map"></div>
 <script>
   let pins = {{ geojson | safe }};
@@ -34,45 +36,29 @@
 
   let markers = L.markerClusterGroup();
 
-  for (let i = 0; i < pins.features.length; i++) {
-    let pin = pins.features[i];
-    let marker = L.marker(
-      new L.LatLng(
-        pin.geometry.coordinates[1],
-        pin.geometry.coordinates[0]
-      ),
-      pin.properties.name
-    );
-    marker.bindPopup(
-      `<a target="_blank" href="../pins/${pin.properties.id}/index.html">
-         ${pin.properties.name}
-       </a>
-      `
-    );
+  for (let pin of pins.features) {
+    let [lng, lat] = pin.geometry.coordinates;
+    let marker = L.marker([lat, lng], {title: pin.properties.name});
+    // build the popup's link as an element, so titles are shown as text
+    let link = document.createElement('a');
+    link.href = `../pins/${pin.properties.id}/index.html`;
+    link.textContent = pin.properties.name;
+    marker.bindPopup(link);
     markers.addLayer(marker);
   }
 
   map.addLayer(markers);
 
   // position the map on a specific pin if one is in the URL
-  if (window.location.hash) {
-    let pinId = parseInt(window.location.hash.replace('#', ''));
-    let pin = null;
-    for (pin of pins.features) {
-      if (pin.properties.id == pinId) {
-        map.setView([pin.geometry.coordinates[1], pin.geometry.coordinates[0]], 18);
-        break;
-      }
-    }
+  let pinId = parseInt(window.location.hash.replace('#', ''));
+  let target = pins.features.find((pin) => pin.properties.id === pinId);
+  if (target) {
+    let [lng, lat] = target.geometry.coordinates;
+    map.setView([lat, lng], 18);
   } else if (pins.features.length) {
-    let center = markers.getBounds().getCenter();
-    map.setView([center.lat, center.lng], 5);
     map.fitBounds(markers.getBounds());
   } else {
     map.setView([20, 0], 2);
   }
-
 </script>
 {% endblock %}
-
-

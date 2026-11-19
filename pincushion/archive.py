@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
+from datetime import datetime
 from pathlib import Path
 from shutil import copytree, rmtree
+from urllib.parse import urlsplit
 
 import jinja2
 import tqdm
@@ -42,9 +45,49 @@ def tag_files(tags: Iterable[str]) -> dict[str, str]:
     return files
 
 
+LICENSE_NAMES = {
+    "public-domain": "Public domain",
+    "open-government": "Open Government Licence",
+}
+
+CC_URL = re.compile(r"creativecommons\.org/(licenses|publicdomain)/([a-z-]+)/([\d.]+)")
+
+
+def license_label(code: str) -> tuple[str, str | None]:
+    """
+    Return a readable name for a pin's license, and a link for it if it has
+    one, e.g. "CC BY-SA 3.0" for a Creative Commons license URL.
+    """
+    href = code if code.startswith(("http://", "https://")) else None
+    if code in LICENSE_NAMES:
+        return LICENSE_NAMES[code], href
+    if match := CC_URL.search(code):
+        kind, name, version = match.groups()
+        if kind == "publicdomain" and name == "zero":
+            return f"CC0 {version}", href
+        if kind == "licenses":
+            return f"CC {name.upper()} {version}", href
+    return code, href
+
+
+def long_date(timestamp: str) -> str:
+    """
+    Format an ISO 8601 timestamp as a date like 19 November 2026.
+    """
+    when = datetime.strptime(timestamp[:10], "%Y-%m-%d")
+    return f"{when.day} {when:%B %Y}"
+
+
+def plural(count: int, word: str) -> str:
+    return f"{count:,} {word}" if count == 1 else f"{count:,} {word}s"
+
+
 env = jinja2.Environment(
     loader=jinja2.PackageLoader("pincushion"), autoescape=jinja2.select_autoescape()
 )
+env.filters["long_date"] = long_date
+env.filters["plural"] = plural
+env.globals["license_label"] = license_label
 
 
 class ArchiveGenerator:
@@ -120,6 +163,23 @@ class ArchiveGenerator:
                 shutil.copyfile(image, dest)
                 return
 
+    def render(self, template: str, root: str, **context) -> str:
+        """
+        Render a page whose path back to the archive's top is root, with
+        what every page shows: the navigation and where the archive came from.
+        """
+        return env.get_template(template).render(
+            root=root,
+            index_title=self.index_title,
+            source=urlsplit(self.data.get("site", "")).netloc,
+            fetched_at=self.data.get("fetched_at"),
+            version=self.data.get("pincushion_version"),
+            pin_count=len(self.pins),
+            partial=self.data.get("partial"),
+            truncated=self.data.get("truncated", []),
+            **context,
+        )
+
     def media_types(self) -> dict[int, str]:
         """
         Map each pin ID to the kind of media in its directory, falling back
@@ -140,39 +200,39 @@ class ArchiveGenerator:
 
     def write_index(self, media: dict[int, str]) -> None:
         loose = [pin for pin in self.pins if pin["id"] not in self.collection_of]
-        html = env.get_template("index.html").render(
+        html = self.render(
+            "index.html",
+            "",
             title=self.index_title,
             description=self.index_description,
             has_image=(self.archive_dir / "index.jpg").is_file(),
             collections=list(self.collections()),
             pins=loose,
             media=media,
-            partial=self.data.get("partial"),
-            truncated=self.data.get("truncated", []),
         )
         self.write(html, "index.html")
 
     def write_collections(self, media: dict[int, str]) -> None:
-        tmpl = env.get_template("collection.html")
         for coll in self.collections():
-            html = tmpl.render(
+            html = self.render(
+                "collection.html",
+                "../../",
                 collection=coll,
                 pins=self.pins_by_collection[coll["id"]],
                 media=media,
-                index_title=self.index_title,
                 title=coll["title"],
             )
             self.write(html, "collections", str(coll["id"]), "index.html")
 
     def write_pins(self, media: dict[int, str]) -> None:
-        tmpl = env.get_template("pin.html")
         for pin in self.pins:
-            html = tmpl.render(
+            html = self.render(
+                "pin.html",
+                "../../",
                 pin=pin,
                 media_type=media[pin["id"]],
                 media_url=media_url(pin),
                 collection=self.collection_of.get(pin["id"]),
-                index_title=self.index_title,
                 title=pin["title"],
                 tag_files=self.tag_files,
             )
@@ -184,22 +244,27 @@ class ArchiveGenerator:
             for tag in pin.get("tags", []):
                 tag_index[tag].append(pin)
 
-        html = env.get_template("tags.html").render(
-            tags=sorted(tag_index.keys()),
+        by_letter: dict[str, list[str]] = defaultdict(list)
+        for tag in sorted(tag_index, key=str.casefold):
+            first = tag[:1].upper()
+            by_letter[first if first.isalpha() else "#"].append(tag)
+        html = self.render(
+            "tags.html",
+            "../",
+            tags_by_letter=sorted(by_letter.items()),
             tag_index=tag_index,
             tag_files=self.tag_files,
-            index_title=self.index_title,
             title="Tags",
         )
         self.write(html, "tags", "index.html")
 
-        tag_tmpl = env.get_template("tag.html")
         for tag, pins in tag_index.items():
-            html = tag_tmpl.render(
+            html = self.render(
+                "tag.html",
+                "../",
                 tag=tag,
                 pins=pins,
                 media=media,
-                index_title=self.index_title,
                 title=f"Tag {tag}",
             )
             self.write(html, "tags", self.tag_files[tag] + ".html")
@@ -227,8 +292,12 @@ class ArchiveGenerator:
 
         self.write(json.dumps(geojson, indent=2), "map", "pins.geojson")
 
-        html = env.get_template("map.html").render(
-            index_title=self.index_title, geojson=json.dumps(geojson, indent=2)
+        html = self.render(
+            "map.html",
+            "../",
+            title="Map",
+            # escape < so no title or description can close the script tag
+            geojson=json.dumps(geojson, indent=2).replace("<", "\\u003c"),
         )
         self.write(html, "map", "index.html")
 

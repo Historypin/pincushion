@@ -1,23 +1,18 @@
 {% extends "base.html" %}
 {% from "gallery.html" import pin_gallery %}
 
-{% block breadcrumb %}
-<ul>
-  <li><a href="../../index.html">{{ index_title }}</a></li>
-  <li>{{ collection.title }}</li>
-</ul>
-{% endblock %}
-
 {% block main %}
 
-<p class="description">
+<h1>{{ collection.title }}</h1>
+
+<div class="prose">
   {% if collection.long_description %}
   {{ collection.long_description | safe }}
   {% else %}
-  {{ collection.short_description or '' }}
+  <p>{{ collection.short_description or '' }}</p>
   {% endif %}
-</p>
+</div>
 
-{{ pin_gallery(pins, media, "../../") }}
+{{ pin_gallery(pins, media, root) }}
 
 {% endblock %}

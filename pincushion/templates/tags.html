@@ -1,26 +1,21 @@
 {% extends "base.html" %}
 
-{% block breadcrumb %}
-<ul>
-  <li><a href="../index.html">{{ index_title }}</a> &gt; Tags</li>
-</ul>
-{% endblock %}
-
 {% block main %}
-<section class="breadcrumb">
-</section>
 
-<div class="tags">
-{% for tag in tags %}
-<div class="tag">
-  <a href="{{ tag_files[tag] | urlencode }}.html">
-    {{ tag }}
-  </a> 
-  ({{ tag_index[tag]|length }})
-</div>
-{% endfor %}
+<h1>Tags</h1>
+
+<div class="tag-index">
+  {% for letter, tags in tags_by_letter %}
+  <h2>{{ letter }}</h2>
+  <ul>
+    {% for tag in tags %}
+    <li>
+      <a href="{{ tag_files[tag] | urlencode }}.html">{{ tag }}</a>
+      <span class="count">{{ tag_index[tag] | length }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
 </div>
 
 {% endblock %}
-
-

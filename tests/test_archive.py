@@ -97,9 +97,9 @@ def test_pin_page_fields(archive):
 
 def test_text_pin_shows_description(archive):
     page = read(archive, "pins", "12", "index.html")
-    media = page[page.index('class="media"') : page.index("</section>")]
+    description = page[page.index('class="prose description"') :]
 
-    assert "In the summer of 1925 downtown was bustling." in media
+    assert "In the summer of 1925 downtown was bustling." in description
 
 
 def test_partial_note(tmp_path):
@@ -175,3 +175,16 @@ def test_map_credits_openstreetmap(archive):
     page = read(archive, "map", "index.html")
 
     assert "OpenStreetMap</a> contributors" in page
+
+
+def test_map_data_cannot_close_its_script_tag(tmp_path):
+    archive = make_archive(tmp_path)
+    data = json.loads((archive / "data.json").read_text())
+    data["pins"][0]["title"] = "Smith & Sons </script><b>"
+    (archive / "data.json").write_text(json.dumps(data))
+
+    ArchiveGenerator(archive).generate()
+
+    page = read(archive, "map", "index.html")
+    assert "</script><b>" not in page
+    assert "\\u003c/script>" in page

@@ -1,0 +1,19 @@
+{% macro pin_gallery(pins, media, prefix, css="gallery") %}
+<section class="{{ css }}">
+  {% for pin in pins %}
+  {% set kind = media[pin.id] %}
+  <a href="{{ prefix }}pins/{{ pin.id }}/index.html">
+  <div class="gallery-item">
+    <div class="name">{{ pin.title }}</div>
+    {% if kind == 'image' %}
+    <img src="{{ prefix }}pins/{{ pin.id }}/image.jpg">
+    {% elif kind == 'video' %}
+    <video src="{{ prefix }}pins/{{ pin.id }}/media.mp4" controls></video>
+    {% elif kind == 'audio' %}
+    <audio src="{{ prefix }}pins/{{ pin.id }}/media.mp3" controls></audio>
+    {% endif %}
+  </div>
+  </a>
+  {% endfor %}
+</section>
+{% endmacro %}

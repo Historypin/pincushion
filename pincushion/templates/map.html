@@ -60,10 +60,12 @@
         break;
       }
     }
-  } else {
+  } else if (pins.features.length) {
     let center = markers.getBounds().getCenter();
     map.setView([center.lat, center.lng], 5);
     map.fitBounds(markers.getBounds());
+  } else {
+    map.setView([20, 0], 2);
   }
 
 </script>

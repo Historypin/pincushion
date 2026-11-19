@@ -3,8 +3,10 @@
 {% block breadcrumb %}
 <ul>
   <li><a href="../../index.html">{{ index_title }}</a></li>
-  <li><a href="../../collections/{{ collection.slug }}/index.html">{{ collection.title }}</a></li>
-  <li>{{ pin.caption }}</li>
+  {% if collection %}
+  <li><a href="../../collections/{{ collection.id }}/index.html">{{ collection.title }}</a></li>
+  {% endif %}
+  <li>{{ pin.title }}</li>
 </ul>
 {% endblock %}
 
@@ -14,129 +16,102 @@
   {% if media_type == 'image' %}
   <img src="image.jpg">
   {% elif media_type == 'video' %}
-  <video src="media.mp4" controls>
+  <video src="media.mp4" controls></video>
   {% elif media_type == 'audio' %}
-  <audio src="media.mp3" controls>
+  <audio src="media.mp3" controls></audio>
   {% elif media_type == 'text' %}
-  <p>{{ pin.display.content }}</p>
+  <p>{{ pin.description | safe }}</p>
   {% endif %}
   </div>
 </section>
 
+{% if pin.description and media_type != 'text' %}
 <section class="description">
   <h2>Description</h2>
   <p class="description">
     {{ pin.description | safe }}
   </p>
 </section>
-
-{% if pin.comments %}
-<section class="comments">
-<h2>Comments</h2>
-{% for comment in pin.comments %}
-<div class="comment">
-  <span class="name">{{ comment.user_name }}</span><br>
-  <span class="created">{{ comment.date_formated }}</span><br>
-  <span class="content">{{ comment['copy'] | safe }}</span>
-</div>
-{% endfor %}
-</section>
 {% endif %}
 
 <section class="metadata">
-
   <dl>
-
     <dt>Creator</dt>
-    <dd>{{ pin.user_name }}</dd>
+    <dd>{{ pin.creator_name }}</dd>
 
-    {% if pin.location %}
+    {% if pin.latitude is not none and pin.longitude is not none %}
     <dt>Location</dt>
     <dd id="location">
-     {{ pin.location.raw }} 
      <a href="../../map/index.html#{{ pin.id }}">
-        ({{ pin.location.lat }}, {{ pin.location.lng }})
+        ({{ pin.latitude }}, {{ pin.longitude }})
      </a>
-    </dd>
-    {% endif %}
-
-    {% if pin.places %}
-    <dt>Places</dt>
-    <dd>
-      {% for place in pin.places %}
-        {{ place.title }}{{ ", " if not loop.last else "" }}
-      {% endfor %}
     </dd>
     {% endif %}
 
     {% if pin.license %}
     <dt>License</dt>
-    <dd><a href="{{ pin.license_key }}">{{ pin.license }}</a></dd>
+    {% if pin.license.startswith('http') %}
+    <dd><a href="{{ pin.license }}">{{ pin.license }}</a></dd>
+    {% else %}
+    <dd>{{ pin.license }}</dd>
+    {% endif %}
     {% endif %}
 
-    {% if pin.link %}
+    {% if pin.source_link %}
     <dt>Link</dt>
-    <dd><a href="{{ pin.link }}">{{ pin.link }}</a></dd>
+    <dd><a href="{{ pin.source_link }}">{{ pin.source_link }}</a></dd>
     {% endif %}
 
-    {% if pin.type == "video" or pin.type == "audio" %}
+    {% if media_url and media_type in ('video', 'audio') %}
     <dt>Original Media Link</dt>
-    <dd><a href="{{ pin.display.content }}">{{ pin.display.content }}</a></dd>
+    <dd><a href="{{ media_url }}">{{ media_url }}</a></dd>
     {% endif %}
 
     {% if pin.tags %}
     <dt>Tags</dt>
     <dd>
       {% for tag in pin.tags %}
-      <a href="../../tags/{{ tag.text }}.html">{{ tag.text }}</a>{{ ", " if not loop.last else "" }}
+      <a href="../../tags/{{ tag | tag_href }}">{{ tag }}</a>{{ ", " if not loop.last else "" }}
       {% endfor %}
     </dd>
     {% endif %}
 
-    {% if pin.date_added %}
+    {% if pin.created_at %}
     <dt>Date Added</dt>
-    <dd>{{ pin.date_added }}</dd>
+    <dd>{{ pin.created_at[:10] }}</dd>
     {% endif %}
 
-    {% if pin.date_taken %}
-    <dt>Date Taken</dt>
-    <dd>{{ pin.date_taken }}</dd>
+    {% if pin.date %}
+    <dt>Date</dt>
+    <dd>{{ pin.date }}</dd>
     {% endif %}
 
-    {% if pin.author %}
-    <dt>Author</dt>
-    <dd>{{ pin.author }}</dd>
+    {% if pin.creator %}
+    <dt>Attribution</dt>
+    <dd>{{ pin.creator }}</dd>
     {% endif %}
 
-    {% if pin.repository and pin.repository != " " %}
-    <dt>Repository</dt>
-    <dd>{{ pin.repository }}</dd>
+    {% if pin.identifier %}
+    <dt>Identifier</dt>
+    <dd>{{ pin.identifier }}</dd>
     {% endif %}
 
-    {% if pin.notes %}
-    <dt>Notes</dt>
-    <dd>{{ pin.notes }}</dd>
-    {% endif %}
-
-    {% if pin.rights_statement  and pin.rights_statement != " " %}
+    {% if pin.rights_statement and pin.rights_statement.strip() %}
     <dt>Rights Statement</dt>
     <dd>{{ pin.rights_statement }}</dd>
     {% endif %}
 
+    {% if pin.url %}
     <dt>Historypin Link</dt>
-    <dd>
-      <a href="https://www.historypin.org/en/person/{{ pin.user_id }}/explore/pin/{{ pin.id }}">
-        https://www.historypin.org/en/person/{{ pin.user_id }}/explore/pin/{{ pin.id }}
-      </a>
-    </dd>
-
+    <dd><a href="{{ pin.url }}">{{ pin.url }}</a></dd>
+    {% endif %}
   </dl>
 </section>
 
 <script>
   window.addEventListener("load", (event) => {
-    if (! navigator.onLine) { 
-      let location = document.getElementById('location');
+    let location = document.getElementById('location');
+    if (location && ! navigator.onLine) {
       location.innerHTML = location.textContent + "<br>Connect to the Internet to view map.";
     }
   });

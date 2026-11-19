@@ -26,7 +26,11 @@
 <script>
   let pins = {{ geojson | safe }};
   let map = L.map('map', {zoomSnap: 0.5});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  // OpenStreetMap's tile usage policy requires this credit, and a Referer,
+  // so the tiles only load when the archive is served over http(s)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
 
   let markers = L.markerClusterGroup();
 

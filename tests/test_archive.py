@@ -169,3 +169,9 @@ def test_null_fields_do_not_render_none(tmp_path):
     for page in ["index.html", "pins/12/index.html", "collections/4/index.html"]:
         assert ">None<" not in read(archive, page), page
         assert "None</" not in read(archive, page), page
+
+
+def test_map_credits_openstreetmap(archive):
+    page = read(archive, "map", "index.html")
+
+    assert "OpenStreetMap</a> contributors" in page

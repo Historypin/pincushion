@@ -42,7 +42,7 @@ def test_fetch_user_self(client, downloader):
     data = fetch_user(client, downloader)
 
     assert set(data) == DATA_KEYS
-    assert data["pincushion_version"] == "1.0.0"
+    assert data["pincushion_version"] == "0.6.0"
     assert data["type"] == "user"
     assert data["site"] == "https://hp.test"
     assert data["fetched_at"].endswith("Z")

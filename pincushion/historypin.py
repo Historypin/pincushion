@@ -22,7 +22,7 @@ DEFAULT_RETRY_AFTER = 60
 TIMEOUT = 60
 # attempts for a server error or a network failure, with backoff between
 ATTEMPTS = 3
-DATA_VERSION = "1.0.0"
+DATA_VERSION = "0.6.0"
 
 
 class HistorypinError(Exception):

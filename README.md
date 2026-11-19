@@ -96,8 +96,8 @@ Requests are rate limited (100 an hour for a regular key, 1000 for a staff key).
 
 The commands that download video and audio accept `--cookie-file`, which is passed to [yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp).
 
-## Upgrading from 0.x
+## Upgrading from 0.5 or earlier
 
-pincushion 1.0 works with the new Historypin site's API. Archives made with 0.x used the old Historypin API, and `regenerate` can't read them, so fetch them again with 1.0.
+pincushion 0.6 works with the new Historypin site's API. Archives made with 0.5 or earlier used the old Historypin API, and `regenerate` can't read them, so fetch them again with 1.0.
 
 [Historypin]: https://historypin.org

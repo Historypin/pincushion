@@ -12,7 +12,7 @@ from pincushion.historypin import HistorypinError
 
 def minimal_data(site="https://historypin.org"):
     return {
-        "pincushion_version": "1.0.0",
+        "pincushion_version": "0.6.0",
         "site": site,
         "fetched_at": "2026-11-19T20:00:00Z",
         "type": "user",
@@ -108,7 +108,7 @@ def test_user_writes_data_and_site(tmp_path, seen):
     assert seen["user_id"] == 42
     assert (
         json.loads((tmp_path / "data.json").read_text())["pincushion_version"]
-        == "1.0.0"
+        == "0.6.0"
     )
     assert (tmp_path / "index.html").is_file()
 

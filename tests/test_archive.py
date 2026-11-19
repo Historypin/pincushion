@@ -34,7 +34,7 @@ def read(archive: Path, *parts: str) -> str:
 def test_rejects_old_archive(tmp_path):
     (tmp_path / "data.json").write_text(json.dumps({"user": {}, "pins": []}))
 
-    with pytest.raises(ValueError, match="0.x"):
+    with pytest.raises(ValueError, match="0.5 or earlier"):
         ArchiveGenerator(tmp_path)
 
 

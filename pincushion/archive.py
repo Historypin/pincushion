@@ -57,8 +57,8 @@ class ArchiveGenerator:
         self.data = json.load((self.archive_dir / "data.json").open())
         if "pincushion_version" not in self.data:
             raise ValueError(
-                f"{archive_dir} was made by pincushion 0.x, which used the old "
-                "Historypin API. Fetch it again with pincushion 1.0."
+                f"{archive_dir} was made by pincushion 0.5 or earlier, which used the old "
+                "Historypin API. Fetch it again with pincushion 0.6 or later."
             )
 
         self.pins: list[dict] = self.data["pins"]

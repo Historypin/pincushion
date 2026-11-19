@@ -301,6 +301,12 @@ class ArchiveGenerator:
         )
         self.write(html, "map", "index.html")
 
+        # coastlines and borders, so the map works without tiles
+        shutil.copyfile(
+            Path(__file__).parent / "templates" / "basemap.js",
+            self.archive_dir / "map" / "basemap.js",
+        )
+
         leaflet = Path(__file__).parent / "templates" / "leaflet"
         leaflet_dir = self.archive_dir / "map" / "leaflet"
         if leaflet_dir.is_dir():

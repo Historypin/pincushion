@@ -188,3 +188,14 @@ def test_map_data_cannot_close_its_script_tag(tmp_path):
     page = read(archive, "map", "index.html")
     assert "</script><b>" not in page
     assert "\\u003c/script>" in page
+
+
+def test_map_has_an_offline_basemap(archive):
+    basemap = read(archive, "map", "basemap.js")
+    page = read(archive, "map", "index.html")
+
+    assert basemap.startswith("// Coastlines")
+    assert "window.PINCUSHION_BASEMAP" in basemap
+    assert '<script src="basemap.js"></script>' in page
+    assert "window.PINCUSHION_BASEMAP" in page
+    assert "Natural Earth" in page

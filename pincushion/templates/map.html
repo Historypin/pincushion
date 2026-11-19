@@ -6,14 +6,27 @@
 <link rel="stylesheet" href="leaflet/leaflet.markercluster/MarkerCluster.Default.css">
 <script src="leaflet/leaflet.js"></script>
 <script src="leaflet/leaflet.markercluster/leaflet.markercluster.js"></script>
+<script src="basemap.js"></script>
 {% endblock %}
 
 {% block style %}
 <style>
 #map {
+  --sea: #dfe8ec;
+  --land: #fbfbf8;
+  --edge: #9aa5ab;
   width: 100%;
   height: 75vh;
   margin-top: 1rem;
+  background: var(--sea);
+}
+
+@media (prefers-color-scheme: dark) {
+  #map {
+    --sea: #1d2a31;
+    --land: #3a3f42;
+    --edge: #7d878c;
+  }
 }
 
 .leaflet-popup-content {
@@ -27,12 +40,36 @@
 <div id="map"></div>
 <script>
   let pins = {{ geojson | safe }};
-  let map = L.map('map', {zoomSnap: 0.5});
-  // OpenStreetMap's tile usage policy requires this credit, and a Referer,
-  // so the tiles only load when the archive is served over http(s)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  let map = L.map('map', {zoomSnap: 0.5, worldCopyJump: true});
+
+  // The basemap is drawn from data in basemap.js, so the map works offline
+  // and from a file.
+  let colours = getComputedStyle(document.getElementById('map'));
+  let colour = (name) => colours.getPropertyValue(name).trim();
+  let basemap = window.PINCUSHION_BASEMAP;
+  let credit = 'Coastlines and borders from <a href="https://www.naturalearthdata.com/">Natural Earth</a>';
+  L.geoJSON(basemap.land, {
+    attribution: credit,
+    interactive: false,
+    style: {stroke: true, color: colour('--edge'), weight: 0.6, fillColor: colour('--land'), fillOpacity: 1},
   }).addTo(map);
+  L.geoJSON(basemap.lakes, {
+    interactive: false,
+    style: {stroke: true, color: colour('--edge'), weight: 0.6, fillColor: colour('--sea'), fillOpacity: 1},
+  }).addTo(map);
+  L.geoJSON(basemap.borders, {
+    interactive: false,
+    style: {color: colour('--edge'), weight: 0.6, dashArray: '2 3'},
+  }).addTo(map);
+
+  // When the archive is served and online, add OpenStreetMap's street-level
+  // tiles on top. Their tile usage policy needs a Referer, which a page
+  // opened from a file can't send, and requires this credit.
+  if (location.protocol.startsWith('http') && navigator.onLine) {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+  }
 
   let markers = L.markerClusterGroup();
 

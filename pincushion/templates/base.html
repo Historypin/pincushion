@@ -40,7 +40,8 @@
 
     .gallery {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      /* as many columns as fit, so the page never scrolls sideways */
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
       align-items: start;
     }
 
@@ -49,6 +50,7 @@
       margin: 10px;
       padding: 10px;
       text-align: center;
+      overflow-wrap: anywhere;
     }
 
     .gallery .gallery-item .name {
@@ -61,16 +63,14 @@
       margin: 5px;
     }
 
-    .gallery .gallery-item img {
-      max-width: 400px;
+    /* fit the column, so the images set no minimum width for it */
+    .gallery .gallery-item img, .gallery .gallery-item video {
+      display: block;
+      max-width: 100%;
       max-height: 400px;
+      height: auto;
       margin-left: auto;
       margin-right: auto;
-    }
-
-    .gallery .gallery-item video {
-      max-width: 400px;
-      max-height: 400px;
     }
 
     .media {
@@ -101,6 +101,8 @@
     dl dd {
       margin-left: 0px;
       margin-bottom: 20px;
+      /* long URLs wrap rather than widen the page */
+      overflow-wrap: anywhere;
     }
 
     .notice {
@@ -135,17 +137,7 @@
         font-size: 1.0em;
       }
 
-      .gallery {
-        grid-template-columns: repeat(1, 1fr);
-      }
-
-      .gallery .gallery-item img {
-        max-width: 300px;
-        max-height: 300px;
-      }
-
-      .gallery .gallery-item video {
-        max-width: 300px;
+      .gallery .gallery-item img, .gallery .gallery-item video {
         max-height: 300px;
       }
       

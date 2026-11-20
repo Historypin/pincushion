@@ -101,7 +101,9 @@ pincushion collection --collection-id 1234 --archive-path my-collection
 ### What your key can archive
 
 - **A regular key** archives your own pins, and the collections you own or manage. A collection archive made with a regular key includes only your own pins in that collection. pincushion warns you, and says on the archive's front page, when it leaves out pins or collections the key can't see.
-- **A staff key** can archive any member (`pincushion user --user-id N`) or a whole collection, including everyone's pins.
+- **A staff key** can archive any member (`pincushion user --user-id N`) or a whole collection, including everyone's pins. An archive of another member includes the collections they own, but not ones they only manage.
+
+`--user-id` is the member's user ID, which is **not** the number in their profile's URL (`/members/<n>/`). You can find it in the Historypin admin, or as the `creator_id` of one of their pins in the API. pincushion prints the name of the member it's archiving when it starts, so you can stop it if it's the wrong person.
 
 The archive doesn't include comments or tours, because the export API doesn't provide them yet. The API returns at most 10,000 items in a list, and pincushion warns you if a list reaches that limit.
 

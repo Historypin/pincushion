@@ -133,6 +133,10 @@ def fetch_user(
     member = client.get("members/me/" if user_id is None else f"members/{user_id}/")
     data = _new_data("user", client.site)
     data["member"] = member
+    # name the member, so archiving the wrong person is obvious straight away
+    click.echo(
+        f"Archiving {member.get('name') or 'unnamed member'} (user ID {member['id']})"
+    )
     if downloader is not None:
         downloader.fetch_image(member.get("image_url"), "index.jpg")
 

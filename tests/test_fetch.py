@@ -273,3 +273,16 @@ def test_pin_progress_advances_per_pin(client, monkeypatch):
     fetch_user(client, CountingDownloader())
 
     assert updates == [1, 1, 1]
+
+
+@responses.activate
+def test_fetch_user_says_whose_archive_it_is(client, downloader, capsys):
+    responses.get(
+        f"{API}/members/9/", json={"id": 9, "name": "Grace Hopper", "image_url": None}
+    )
+    responses.get(f"{API}/pins/", json=page([]))
+    responses.get(f"{API}/collections/", json=page([]))
+
+    fetch_user(client, downloader, user_id=9)
+
+    assert "Archiving Grace Hopper (user ID 9)" in capsys.readouterr().out

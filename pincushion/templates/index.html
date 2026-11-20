@@ -1,29 +1,30 @@
 {% extends "base.html" %}
+{% from "gallery.html" import pin_gallery, collection_gallery with context %}
+
 {% block main %}
 
-<section class="profile">
-  <div class="media">
-    <img alt="{{ title }}" src="index.jpg">
-  </div>
-  {% if title %}
-  <h1>{{ title }}</h1>
-  <p>
-    {{ description | safe }}  
-  </p>
-</section>
+<h1>{{ title }}</h1>
 
-
+{% if has_image %}
+<div class="object portrait">
+  <img alt="" src="index.jpg">
+</div>
 {% endif %}
 
-<section class="gallery">
-  {% for coll in collections %}
-  <a href="collections/{{ coll.slug }}/index.html">
-  <div class="gallery-item">
-    <div class="name">{{ coll.title }}</div>
-    <img src="collections/{{ coll.slug }}/image.jpg">
-  </div>
-  </a>
-  {% endfor %}
-</section>
+{% if description %}
+<div class="prose">
+  {{ description | safe }}
+</div>
+{% endif %}
+
+{% if collections %}
+<h2>Collections</h2>
+{{ collection_gallery(collections, root) }}
+{% endif %}
+
+{% if pins %}
+{% if collections %}<h2>Other pins</h2>{% endif %}
+{{ pin_gallery(pins, media, root, "gallery pins") }}
+{% endif %}
 
 {% endblock %}

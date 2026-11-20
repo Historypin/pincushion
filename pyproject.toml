@@ -6,10 +6,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 repository = "https://github.com/historypin/pincushion"
 dependencies = [
-    "requests>=2.32.3",
-    "tqdm>=4.66.5",
-    "click>=8.1.7",
-    "jinja2>=3.1.4",
+    "requests>=2.34",
+    "tqdm>=4.70",
+    "click>=8.5",
+    "jinja2>=3.1.6",
     # yt-dlp has to keep up with YouTube, so require a recent release; the
     # default extras include the JavaScript challenge solver YouTube needs
     "yt-dlp[default]>=2026.10.26",
@@ -24,12 +24,12 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.3",
-    "mypy>=1.11.2",
-    "types-requests>=2.32.0.20240914",
-    "types-tqdm>=4.66.0.20240417",
-    "hatch>=1.13.0",
-    "responses>=0.25",
+    "pytest>=9.2",
+    "mypy>=2.4",
+    "types-requests>=2.33",
+    "types-tqdm>=4.70",
+    "hatch>=1.18",
+    "responses>=0.26",
     "ruff==0.17.6",
 ]
 

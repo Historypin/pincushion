@@ -204,3 +204,15 @@ def test_map_has_an_offline_basemap(archive):
 def test_map_sets_its_own_max_zoom(archive):
     # the cluster plugin needs one, and offline there's no tile layer to give it
     assert "maxZoom: 18" in read(archive, "map", "index.html")
+
+
+def test_media_that_failed_to_download_links_to_the_original(archive):
+    # pin 11's video and pin 14's audio were never downloaded
+    video = read(archive, "pins", "11", "index.html")
+    audio = read(archive, "pins", "14", "index.html")
+
+    assert "<video" not in video
+    assert "couldn't be downloaded" in video
+    assert 'href="https://www.youtube.com/watch?v=x"' in video
+    assert "<audio" not in audio
+    assert 'href="https://soundcloud.com/a/b"' in audio

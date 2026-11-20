@@ -3,8 +3,8 @@ from __future__ import annotations
 import functools
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import click
 

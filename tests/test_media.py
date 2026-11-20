@@ -232,3 +232,54 @@ def test_pause_between_downloads(tmp_path, monkeypatch):
     downloader.fetch_image("https://img.test/a.jpg", "a.jpg")  # already present
 
     assert sleeps == [0.25, 0.25]
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        (
+            (
+                "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/"
+                "soundcloud%253Atracks%253A253508261&color=%23ff5500&auto_play=false"
+            ),
+            "https://api.soundcloud.com/tracks/253508261",
+        ),
+        (
+            "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/42",
+            "https://api.soundcloud.com/tracks/42",
+        ),
+        ("https://soundcloud.com/artist/track", "https://soundcloud.com/artist/track"),
+        ("https://www.youtube.com/watch?v=x", "https://www.youtube.com/watch?v=x"),
+    ],
+)
+def test_downloadable_url_unwraps_soundcloud_players(url, expected):
+    assert media.downloadable_url(url) == expected
+
+
+def test_pin_av_downloads_soundcloud_player_tracks(tmp_path, monkeypatch):
+    seen = {}
+
+    class FakeYoutubeDL:
+        def __init__(self, params):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url):
+            seen["url"] = url
+
+    monkeypatch.setattr(media.yt_dlp, "YoutubeDL", FakeYoutubeDL)
+
+    MediaDownloader(tmp_path, SITE).pin_av(
+        {
+            "id": 8,
+            "type": "AUDIO",
+            "audio_url": "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/42",
+        }
+    )
+
+    assert seen["url"] == "https://api.soundcloud.com/tracks/42"

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode, urlsplit
 
@@ -206,7 +206,7 @@ def _new_data(kind: str, site: str) -> dict:
     return {
         "pincushion_version": DATA_VERSION,
         "site": site,
-        "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "fetched_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "type": kind,
         "member": None,
         "collection": None,

@@ -3,14 +3,16 @@ name = "pincushion"
 version = "0.6.0"
 description = "An archiving tool for Historypin"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 repository = "https://github.com/historypin/pincushion"
 dependencies = [
     "requests>=2.32.3",
     "tqdm>=4.66.5",
     "click>=8.1.7",
     "jinja2>=3.1.4",
-    "yt-dlp>=2024.9.27",
+    # yt-dlp has to keep up with YouTube, so require a recent release; the
+    # default extras include the JavaScript challenge solver YouTube needs
+    "yt-dlp[default]>=2026.10.26",
 ]
 
 [project.scripts]

@@ -38,9 +38,19 @@ Each pin has its own directory, which contains its uploaded media (image, audio 
 
 ## Install
 
+pincushion needs Python 3.11 or later.
+
 ```shell
 pip install pincushion
 ```
+
+pincushion uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) to download video and audio. Sites like YouTube change often, and an old yt-dlp soon stops working with them, so upgrade it before making an archive:
+
+```shell
+pip install --upgrade yt-dlp
+```
+
+Some media can't be downloaded at all, for example SoundCloud tracks the rights holder protects with DRM. The pin's page then says so and links to the original.
 
 ## Get an API key
 

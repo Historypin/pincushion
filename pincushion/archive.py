@@ -180,6 +180,16 @@ class ArchiveGenerator:
             **context,
         )
 
+    def has_media(self, pin: dict) -> bool:
+        """
+        Whether the pin's image, video or audio is in the archive.
+        """
+        pin_dir = self.archive_dir / "pins" / str(pin["id"])
+        return any(
+            (pin_dir / name).is_file()
+            for name in ("image.jpg", "media.mp4", "media.mp3")
+        )
+
     def media_types(self) -> dict[int, str]:
         """
         Map each pin ID to the kind of media in its directory, falling back
@@ -231,6 +241,7 @@ class ArchiveGenerator:
                 "../../",
                 pin=pin,
                 media_type=media[pin["id"]],
+                downloaded=self.has_media(pin),
                 media_url=media_url(pin),
                 collection=self.collection_of.get(pin["id"]),
                 title=pin["title"],

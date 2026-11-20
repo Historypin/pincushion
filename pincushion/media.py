@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 
 import requests
 import tqdm
@@ -40,7 +40,30 @@ def media_url(pin: dict) -> str | None:
     """
     Return the URL of a pin's primary media.
     """
-    return pin.get("image_url") or pin.get("video_url") or pin.get("audio_url")
+    kind = media_type(pin)
+    if kind == "image":
+        return pin.get("image_url")
+    if kind in ("video", "audio"):
+        return pin.get("video_url") or pin.get("audio_url")
+    return None
+
+
+SOUNDCLOUD_TRACK = re.compile(
+    r"api\.soundcloud\.com/tracks/(?:soundcloud:tracks:)?(\d+)"
+)
+
+
+def downloadable_url(url: str) -> str:
+    """
+    Return a URL yt-dlp can download. SoundCloud pins are often stored as the
+    embedded player's URL, which wraps the track's URL in a query parameter.
+    """
+    parts = urlsplit(url)
+    if parts.netloc == "w.soundcloud.com":
+        wrapped = parse_qs(parts.query).get("url", [""])[0]
+        if match := SOUNDCLOUD_TRACK.search(unquote(wrapped)):
+            return f"https://api.soundcloud.com/tracks/{match.group(1)}"
+    return url
 
 
 class MediaDownloader:
@@ -112,6 +135,8 @@ class MediaDownloader:
         if kind not in ("video", "audio"):
             return
         url = pin.get("video_url") or pin.get("audio_url")
+        if url:
+            url = downloadable_url(url)
         if not url:
             logger.error(f"pin {pin['id']} has no media link")
             return

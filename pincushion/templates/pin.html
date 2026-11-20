@@ -16,7 +16,12 @@
 <h1>{{ pin.title }}</h1>
 
 <div class="object">
-  {% if media_type == 'image' %}
+  {% if media_type in ('image', 'video', 'audio') and not downloaded %}
+  <p class="notice">
+    The {{ media_type }} couldn't be downloaded when this archive was made.
+    {% if media_url %}It may still be at <a href="{{ media_url }}">{{ media_url }}</a>.{% endif %}
+  </p>
+  {% elif media_type == 'image' %}
   <img src="image.jpg" alt="">
   {% elif media_type == 'video' %}
   <video src="media.mp4" controls></video>

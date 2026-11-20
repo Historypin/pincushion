@@ -216,3 +216,18 @@ def test_media_that_failed_to_download_links_to_the_original(archive):
     assert 'href="https://www.youtube.com/watch?v=x"' in video
     assert "<audio" not in audio
     assert 'href="https://soundcloud.com/a/b"' in audio
+
+
+def test_video_and_audio_posters_are_shown(tmp_path):
+    archive = make_archive(tmp_path)
+    for pin_id, name in ((11, "media.mp4"), (14, "media.mp3")):
+        (archive / "pins" / str(pin_id)).mkdir(parents=True, exist_ok=True)
+        (archive / "pins" / str(pin_id) / name).write_bytes(b"media")
+        (archive / "pins" / str(pin_id) / "poster.jpg").write_bytes(b"jpg")
+
+    ArchiveGenerator(archive).generate()
+
+    assert 'poster="poster.jpg"' in read(archive, "pins", "11", "index.html")
+    assert '<img src="poster.jpg"' in read(archive, "pins", "14", "index.html")
+    collection = read(archive, "collections", "3", "index.html")
+    assert 'src="../../pins/11/poster.jpg"' in collection

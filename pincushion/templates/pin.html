@@ -17,15 +17,17 @@
 
 <div class="object">
   {% if media_type in ('image', 'video', 'audio') and not downloaded %}
+  {% if pin.id in posters %}<img src="poster.jpg" alt="">{% endif %}
   <p class="notice">
     The {{ media_type }} couldn't be downloaded when this archive was made.
-    {% if media_url %}It may still be at <a href="{{ media_url }}">{{ media_url }}</a>.{% endif %}
+    {% if media_url %}It may still be on <a href="{{ media_url }}">{{ media_url | host }}</a>.{% endif %}
   </p>
   {% elif media_type == 'image' %}
   <img src="image.jpg" alt="">
   {% elif media_type == 'video' %}
-  <video src="media.mp4" controls></video>
+  <video src="media.mp4" controls{% if pin.id in posters %} poster="poster.jpg"{% endif %}></video>
   {% elif media_type == 'audio' %}
+  {% if pin.id in posters %}<img src="poster.jpg" alt="">{% endif %}
   <audio src="media.mp3" controls></audio>
   {% endif %}
 </div>

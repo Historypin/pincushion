@@ -112,7 +112,8 @@ def test_pin_av_calls_ytdlp(tmp_path, monkeypatch):
 
     class FakeYoutubeDL:
         def __init__(self, params):
-            seen["params"] = params
+            if "outtmpl" in params:  # not the thumbnail lookup
+                seen["params"] = params
 
         def __enter__(self):
             return self
@@ -120,8 +121,10 @@ def test_pin_av_calls_ytdlp(tmp_path, monkeypatch):
         def __exit__(self, *exc):
             return False
 
-        def extract_info(self, url):
-            seen["url"] = url
+        def extract_info(self, url, download=True, **kwargs):
+            if download:
+                seen["url"] = url
+            return {}
 
     monkeypatch.setattr(media.yt_dlp, "YoutubeDL", FakeYoutubeDL)
 
@@ -269,8 +272,10 @@ def test_pin_av_downloads_soundcloud_player_tracks(tmp_path, monkeypatch):
         def __exit__(self, *exc):
             return False
 
-        def extract_info(self, url):
-            seen["url"] = url
+        def extract_info(self, url, download=True, **kwargs):
+            if download:
+                seen["url"] = url
+            return {}
 
     monkeypatch.setattr(media.yt_dlp, "YoutubeDL", FakeYoutubeDL)
 
@@ -283,3 +288,109 @@ def test_pin_av_downloads_soundcloud_player_tracks(tmp_path, monkeypatch):
     )
 
     assert seen["url"] == "https://api.soundcloud.com/tracks/42"
+
+
+def fake_ytdlp(monkeypatch, info, fail_download=False):
+    """Stand in for yt_dlp.YoutubeDL: extract_info returns info, and a real
+    download raises DownloadError when fail_download is set."""
+
+    class FakeYoutubeDL:
+        def __init__(self, params):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download=True, process=True):
+            if download and fail_download:
+                raise media.yt_dlp.utils.DownloadError("This video is DRM protected")
+            return info
+
+    monkeypatch.setattr(media.yt_dlp, "YoutubeDL", FakeYoutubeDL)
+
+
+VIDEO_PIN = {"id": 7, "type": "VIDEO", "video_url": "https://youtube.com/watch?v=x"}
+
+
+@responses.activate
+def test_pin_av_saves_a_poster(tmp_path, monkeypatch):
+    fake_ytdlp(monkeypatch, {"thumbnail": "https://img.test/thumb.jpg"})
+    responses.get("https://img.test/thumb.jpg", body=b"poster")
+
+    MediaDownloader(tmp_path, SITE).pin_av(VIDEO_PIN)
+
+    assert (tmp_path / "pins/7/poster.jpg").read_bytes() == b"poster"
+
+
+@responses.activate
+def test_poster_saved_even_when_media_cannot_be_downloaded(tmp_path, monkeypatch):
+    fake_ytdlp(
+        monkeypatch,
+        {
+            "thumbnails": [
+                {"url": "https://img.test/small.jpg"},
+                {"url": "https://img.test/big.jpg"},
+            ]
+        },
+        fail_download=True,
+    )
+    responses.get("https://img.test/big.jpg", body=b"poster")
+
+    MediaDownloader(tmp_path, SITE).pin_av(VIDEO_PIN)
+
+    assert (tmp_path / "pins/7/poster.jpg").read_bytes() == b"poster"
+
+
+@responses.activate
+def test_poster_fetched_for_media_already_downloaded(tmp_path, monkeypatch):
+    fake_ytdlp(
+        monkeypatch, {"thumbnail": "https://img.test/thumb.jpg"}, fail_download=True
+    )
+    responses.get("https://img.test/thumb.jpg", body=b"poster")
+    (tmp_path / "pins/7").mkdir(parents=True)
+    (tmp_path / "pins/7/media.mp4").write_bytes(b"video")
+
+    MediaDownloader(tmp_path, SITE).pin_av(VIDEO_PIN)
+
+    assert (tmp_path / "pins/7/poster.jpg").is_file()
+
+
+@responses.activate
+def test_soundcloud_poster_falls_back_to_oembed(tmp_path, monkeypatch):
+    class DRMYoutubeDL:
+        def __init__(self, params):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, **kwargs):
+            raise media.yt_dlp.utils.DownloadError("This video is DRM protected")
+
+    monkeypatch.setattr(media.yt_dlp, "YoutubeDL", DRMYoutubeDL)
+    responses.get(
+        "https://soundcloud.com/oembed",
+        json={"thumbnail_url": "https://i1.sndcdn.com/artworks-t500x500.jpg"},
+        match=[
+            responses.matchers.query_param_matcher(
+                {"format": "json", "url": "https://api.soundcloud.com/tracks/42"}
+            )
+        ],
+    )
+    responses.get("https://i1.sndcdn.com/artworks-t500x500.jpg", body=b"artwork")
+
+    MediaDownloader(tmp_path, SITE).pin_av(
+        {
+            "id": 8,
+            "type": "AUDIO",
+            "audio_url": "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/42",
+        }
+    )
+
+    assert (tmp_path / "pins/8/poster.jpg").read_bytes() == b"artwork"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import re
@@ -50,6 +51,23 @@ LICENSE_NAMES = {
     "open-government": "Open Government Licence",
 }
 
+# the statements at https://rightsstatements.org/page/1.0/
+RIGHTS_STATEMENTS = {
+    "InC": "In Copyright",
+    "InC-OW-EU": "In Copyright - EU Orphan Work",
+    "InC-EDU": "In Copyright - Educational Use Permitted",
+    "InC-NC": "In Copyright - Non-Commercial Use Permitted",
+    "InC-RUU": "In Copyright - Rights-holder(s) Unlocatable or Unidentifiable",
+    "NoC-CR": "No Copyright - Contractual Restrictions",
+    "NoC-NC": "No Copyright - Non-Commercial Use Only",
+    "NoC-OKLR": "No Copyright - Other Known Legal Restrictions",
+    "NoC-US": "No Copyright - United States",
+    "CNE": "Copyright Not Evaluated",
+    "UND": "Copyright Undetermined",
+    "NKC": "No Known Copyright",
+}
+RIGHTS_STATEMENT_URL = re.compile(r"rightsstatements\.org/vocab/([A-Za-z-]+)/")
+
 CC_URL = re.compile(r"creativecommons\.org/(licenses|publicdomain)/([a-z-]+)/([\d.]+)")
 
 
@@ -61,6 +79,10 @@ def license_label(code: str) -> tuple[str, str | None]:
     href = code if code.startswith(("http://", "https://")) else None
     if code in LICENSE_NAMES:
         return LICENSE_NAMES[code], href
+    if (match := RIGHTS_STATEMENT_URL.search(code)) and match.group(
+        1
+    ) in RIGHTS_STATEMENTS:
+        return RIGHTS_STATEMENTS[match.group(1)], href
     if match := CC_URL.search(code):
         kind, name, version = match.groups()
         if kind == "publicdomain" and name == "zero":
@@ -87,6 +109,7 @@ env = jinja2.Environment(
 )
 env.filters["long_date"] = long_date
 env.filters["plural"] = plural
+env.filters["host"] = lambda url: urlsplit(url).netloc or url
 env.globals["license_label"] = license_label
 
 
@@ -120,6 +143,7 @@ class ArchiveGenerator:
     def generate(self) -> None:
         if self.downloader is not None:
             self.download_media()
+            self.__dict__.pop("posters", None)
         media = self.media_types()
         self.write_index(media)
         self.write_collections(media)
@@ -151,17 +175,19 @@ class ArchiveGenerator:
 
     def copy_first_pin_image(self, coll: dict, rel_path: str) -> None:
         """
-        Use the collection's first pin image when it has no banner.
+        Use the collection's first pin image, or a video or audio pin's
+        poster, when it has no banner.
         """
         dest = self.archive_dir / rel_path
         if dest.is_file():
             return
         for pin in self.pins_by_collection[coll["id"]]:
-            image = self.archive_dir / "pins" / str(pin["id"]) / "image.jpg"
-            if image.is_file():
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(image, dest)
-                return
+            pin_dir = self.archive_dir / "pins" / str(pin["id"])
+            for image in (pin_dir / "image.jpg", pin_dir / "poster.jpg"):
+                if image.is_file():
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(image, dest)
+                    return
 
     def render(self, template: str, root: str, **context) -> str:
         """
@@ -177,8 +203,20 @@ class ArchiveGenerator:
             pin_count=len(self.pins),
             partial=self.data.get("partial"),
             truncated=self.data.get("truncated", []),
+            posters=self.posters,
             **context,
         )
+
+    @functools.cached_property
+    def posters(self) -> set[int]:
+        """
+        The IDs of video and audio pins with a poster image.
+        """
+        return {
+            pin["id"]
+            for pin in self.pins
+            if (self.archive_dir / "pins" / str(pin["id"]) / "poster.jpg").is_file()
+        }
 
     def has_media(self, pin: dict) -> bool:
         """

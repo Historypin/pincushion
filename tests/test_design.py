@@ -134,3 +134,50 @@ def test_tags_page_is_grouped_by_letter(archive):
     assert "<h2>S</h2>" in html
     assert html.index("<h2>A</h2>") < html.index("<h2>S</h2>")
     assert 'class="tag"' not in html
+
+
+@pytest.mark.parametrize(
+    "code, label",
+    [
+        ("http://rightsstatements.org/vocab/InC/1.0/", "In Copyright"),
+        (
+            "http://rightsstatements.org/vocab/NoC-US/1.0/",
+            "No Copyright - United States",
+        ),
+        ("http://rightsstatements.org/vocab/CNE/1.0/", "Copyright Not Evaluated"),
+    ],
+)
+def test_license_label_names_rights_statements(code, label):
+    assert license_label(code) == (label, code)
+
+
+def test_missing_media_note_names_the_site(tmp_path):
+    archive = make_archive(tmp_path)
+    ArchiveGenerator(archive).generate()
+
+    html = read(archive, "pins", "11", "index.html")
+
+    assert '<a href="https://www.youtube.com/watch?v=x">www.youtube.com</a>' in html
+
+
+def test_collection_without_images_uses_a_poster(tmp_path):
+    archive = make_archive(tmp_path)
+    data = json.loads((archive / "data.json").read_text())
+    data["pins"][0]["collection_ids"] = []  # leave collection 3 with only the video
+    (archive / "data.json").write_text(json.dumps(data))
+    (archive / "pins/11").mkdir(parents=True)
+    (archive / "pins/11/poster.jpg").write_bytes(b"poster")
+
+    class NoDownloads:
+        def fetch_image(self, url, rel_path):
+            return False
+
+        def pin_images(self, pins, progress=None):
+            pass
+
+        def all_pin_av(self, pins, progress=True):
+            pass
+
+    ArchiveGenerator(archive, downloader=NoDownloads()).generate()
+
+    assert (archive / "collections/3/image.jpg").read_bytes() == b"poster"

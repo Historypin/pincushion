@@ -147,8 +147,56 @@ class MediaDownloader:
         )
         if present and not self.overwrite:
             logger.info(f"skipping download of {url} since it is already present")
-            return
+        else:
+            self._download_av(url, kind, path)
+        self.pin_poster(pin, url)
 
+    def pin_poster(self, pin: dict, url: str) -> None:
+        """
+        Save the thumbnail the media's site provides as the pin's poster, so
+        players and galleries don't show a black frame. yt-dlp can read it
+        even when the media itself can't be downloaded.
+        """
+        rel_path = f"pins/{pin['id']}/poster.jpg"
+        if (self.archive_dir / rel_path).is_file() and not self.overwrite:
+            return
+        opts = {"quiet": True, "logger": logger}
+        if self.cookie_file:
+            opts["cookiefile"] = self.cookie_file
+        info: dict = {}
+        with yt_dlp.YoutubeDL(params=opts) as ydl:
+            try:
+                info = ydl.extract_info(url, download=False, process=False) or {}
+            except yt_dlp.utils.DownloadError as e:
+                logger.info(f"yt-dlp couldn't read the details of {url}: {e}")
+        thumbnails = info.get("thumbnails") or []
+        thumbnail = info.get("thumbnail") or (
+            thumbnails[-1].get("url") if thumbnails else None
+        )
+        # yt-dlp stops at SoundCloud's DRM check before reading the artwork,
+        # but SoundCloud's public oEmbed endpoint still provides it
+        if not thumbnail and "soundcloud.com" in urlsplit(url).netloc:
+            thumbnail = self._soundcloud_artwork(url)
+        if thumbnail:
+            self.fetch_image(thumbnail, rel_path)
+        else:
+            logger.error(f"no thumbnail found for {url}")
+
+    def _soundcloud_artwork(self, url: str) -> str | None:
+        try:
+            resp = requests.get(
+                "https://soundcloud.com/oembed",
+                params={"format": "json", "url": url},
+                headers={"User-Agent": USER_AGENT},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            return resp.json().get("thumbnail_url")
+        except (requests.RequestException, ValueError) as e:
+            logger.error(f"unable to get SoundCloud artwork for {url}: {e}")
+            return None
+
+    def _download_av(self, url: str, kind: str, path: Path) -> None:
         logger.info(f"downloading media {url} to {path}")
         opts: dict = {
             "noprogress": True,

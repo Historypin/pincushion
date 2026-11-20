@@ -7,6 +7,8 @@
       <div class="frame">
         {% if kind == 'image' %}
         <img src="{{ root }}pins/{{ pin.id }}/image.jpg" alt="" loading="lazy">
+        {% elif kind in ('video', 'audio') and pin.id in posters %}
+        <img src="{{ root }}pins/{{ pin.id }}/poster.jpg" alt="" loading="lazy">
         {% elif kind == 'video' %}
         <video src="{{ root }}pins/{{ pin.id }}/media.mp4" preload="metadata"></video>
         {% elif kind == 'audio' %}

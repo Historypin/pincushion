@@ -5,13 +5,13 @@
   <li>
     <a href="{{ root }}pins/{{ pin.id }}/index.html">
       <div class="frame">
-        {% if kind == 'image' %}
+        {% if kind == 'image' and pin.id in downloaded %}
         <img src="{{ root }}pins/{{ pin.id }}/image.jpg" alt="" loading="lazy">
         {% elif kind in ('video', 'audio') and pin.id in posters %}
         <img src="{{ root }}pins/{{ pin.id }}/poster.jpg" alt="" loading="lazy">
-        {% elif kind == 'video' %}
+        {% elif kind == 'video' and pin.id in downloaded %}
         <video src="{{ root }}pins/{{ pin.id }}/media.mp4" preload="metadata"></video>
-        {% elif kind == 'audio' %}
+        {% elif kind == 'audio' and pin.id in downloaded %}
         <audio src="{{ root }}pins/{{ pin.id }}/media.mp3" controls preload="none"></audio>
         {% else %}
         <div class="text-pin">{{ (pin.description or '') | striptags | truncate(160) }}</div>

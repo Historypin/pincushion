@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from importlib.metadata import version
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode, urlsplit
 
@@ -22,7 +24,7 @@ DEFAULT_RETRY_AFTER = 60
 TIMEOUT = 60
 # attempts for a server error or a network failure, with backoff between
 ATTEMPTS = 3
-DATA_VERSION = "0.6.0"
+DATA_VERSION = version("pincushion")
 # identify pincushion to Historypin and to the sites media is downloaded from
 USER_AGENT = f"pincushion/{DATA_VERSION} (+https://github.com/historypin/pincushion)"
 
@@ -141,14 +143,16 @@ def fetch_user(
         downloader.fetch_image(member.get("image_url"), "index.jpg")
 
     data["pins"] = _fetch_pins(client, downloader, data, {"creator": member["id"]})
-    # a regular key already only lists the collections its owner owns or
-    # manages; for anyone else the API can only filter by owner
-    params = {} if user_id is None else {"owner": user_id}
-    # A staff key's unfiltered list has every collection on the site, so keep
-    # only the collections that hold the member's pins. Collections without
-    # them would never be shown anyway.
+    # only the collections that hold the member's pins, since collections
+    # without them would never be shown
     wanted = {cid for pin in data["pins"] for cid in pin.get("collection_ids", [])}
-    data["collections"] = _fetch_collections(client, downloader, data, params, wanted)
+    if user_id is None:
+        data["collections"] = _fetch_own_collections(client, downloader, wanted)
+    else:
+        # for anyone but the key owner the API can only filter by owner
+        data["collections"] = _fetch_collections(
+            client, downloader, data, {"owner": user_id}, wanted
+        )
     return data
 
 
@@ -172,8 +176,14 @@ def fetch_collection(
     pins: dict[int, dict] = {}
     while queue:
         coll = queue.pop(0)
-        for pin in _fetch_pins(client, downloader, data, {"collections": coll["id"]}):
-            pins.setdefault(pin["id"], pin)
+        # pin_ids and child_ids list everything, whatever the key can see, so
+        # skip the requests for lists that are sure to be empty
+        if _may_have(coll, "pin_ids"):
+            params = {"collections": coll["id"]}
+            for pin in _fetch_pins(client, downloader, data, params):
+                pins.setdefault(pin["id"], pin)
+        if not _may_have(coll, "child_ids"):
+            continue
         for child in _fetch_collections(
             client, downloader, data, {"parent": coll["id"]}
         ):
@@ -204,6 +214,51 @@ def fetch_collection(
             err=True,
         )
     return data
+
+
+def _may_have(coll: dict, field: str) -> bool:
+    return coll.get(field) is None or len(coll[field]) > 0
+
+
+def _fetch_own_collections(
+    client: Client, downloader: MediaDownloader | None, wanted: set[int]
+) -> list[dict]:
+    """
+    Fetch the wanted collections the key owner can see. A regular key's list
+    only has the collections its owner owns or manages, but a staff key's has
+    every collection on the site, so page through the list only while that
+    takes fewer requests than getting the rest of the wanted ones one by one.
+    """
+    collections: list[dict] = []
+    remaining = set(wanted)
+    listed = 0
+    if remaining:
+        for results in client.pages("collections/"):
+            listed += len(results)
+            collections.extend(coll for coll in results if coll["id"] in remaining)
+            remaining -= {coll["id"] for coll in results}
+            pages_left = math.ceil(
+                ((client.last_count or 0) - listed) / max(len(results), 1)
+            )
+            if not remaining or len(remaining) < pages_left:
+                break
+        else:
+            # what's left isn't visible to the key, unless the list was capped
+            if not client.is_capped():
+                remaining = set()
+
+    for cid in sorted(remaining):
+        try:
+            collections.append(client.get(f"collections/{cid}/"))
+        except HistorypinError as e:
+            logger.warning(f"leaving out collection {cid}: {e}")
+
+    if downloader is not None:
+        for coll in collections:
+            downloader.fetch_image(
+                coll.get("banner_image_url"), f"collections/{coll['id']}/image.jpg"
+            )
+    return sorted(collections, key=lambda coll: coll["id"])
 
 
 def _new_data(kind: str, site: str) -> dict:

@@ -286,3 +286,70 @@ def test_fetch_user_says_whose_archive_it_is(client, downloader, capsys):
     fetch_user(client, downloader, user_id=9)
 
     assert "Archiving Grace Hopper (user ID 9)" in capsys.readouterr().out
+
+
+@responses.activate
+def test_staff_own_archive_gets_collections_one_by_one(client, downloader):
+    # a staff key's unfiltered list is the whole site, here 50 pages of it,
+    # so getting the two wanted collections directly takes fewer requests
+    responses.get(f"{API}/members/me/", json=MEMBER)
+    responses.get(
+        f"{API}/pins/",
+        json=page([{"id": 1, "type": "TEXT", "collection_ids": [700, 3]}]),
+    )
+    listing = responses.get(
+        f"{API}/collections/",
+        json=page(
+            [{"id": n, "banner_image_url": None} for n in range(100, 200)],
+            next=f"{API}/collections/?page=2",
+            count=5000,
+        ),
+    )
+    responses.get(f"{API}/collections/3/", json={"id": 3, "banner_image_url": None})
+    responses.get(f"{API}/collections/700/", json={"id": 700, "banner_image_url": None})
+
+    data = fetch_user(client, downloader)
+
+    assert listing.call_count == 1
+    assert [c["id"] for c in data["collections"]] == [3, 700]
+    assert data["truncated"] == []
+
+
+@responses.activate
+def test_own_archive_leaves_out_collections_the_key_cannot_see(client, downloader):
+    # a regular key's whole list is short, and lacks collection 5
+    responses.get(f"{API}/members/me/", json=MEMBER)
+    responses.get(
+        f"{API}/pins/",
+        json=page([{"id": 1, "type": "TEXT", "collection_ids": [3, 5]}]),
+    )
+    responses.get(
+        f"{API}/collections/", json=page([{"id": 3, "banner_image_url": None}])
+    )
+
+    data = fetch_user(client, downloader)
+
+    assert [c["id"] for c in data["collections"]] == [3]
+    assert len(responses.calls) == 3
+
+
+@responses.activate
+def test_own_archive_without_collections_lists_none(client, downloader):
+    responses.get(f"{API}/members/me/", json=MEMBER)
+    responses.get(f"{API}/pins/", json=page([{"id": 1, "type": "TEXT"}]))
+
+    data = fetch_user(client, downloader)
+
+    assert data["collections"] == []
+    assert len(responses.calls) == 2
+
+
+@responses.activate
+def test_empty_lists_are_not_requested(client, downloader):
+    collections = {1: coll(1, [2], [10]), 2: coll(2)}
+    serve_tree(collections, {1: [2]}, {1: [10]})
+
+    fetch_collection(client, downloader, 1)
+
+    requested = [call.request.url for call in responses.calls]
+    assert not any("parent=2" in url or "collections=2" in url for url in requested)

@@ -119,6 +119,6 @@ The commands that download video and audio accept `--cookie-file`, which is pass
 
 ## Upgrading from 0.5 or earlier
 
-pincushion 0.6 works with the new Historypin site's API. Archives made with 0.5 or earlier used the old Historypin API, and `regenerate` can't read them, so fetch them again with 1.0.
+pincushion 0.6 works with the new Historypin site's API. Archives made with 0.5 or earlier used the old Historypin API, and `regenerate` can't read them, so fetch them again with 0.6.
 
 [Historypin]: https://historypin.org

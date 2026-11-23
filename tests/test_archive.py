@@ -231,3 +231,27 @@ def test_video_and_audio_posters_are_shown(tmp_path):
     assert '<img src="poster.jpg"' in read(archive, "pins", "14", "index.html")
     collection = read(archive, "collections", "3", "index.html")
     assert 'src="../../pins/11/poster.jpg"' in collection
+
+
+@pytest.mark.parametrize(
+    "tag, name",
+    [
+        ("WW2: Home Front", "WW2- Home Front"),
+        ('a<b>c"d\\e|f?g*h', "a-b-c-d-e-f-g-h"),
+        ("tab\there", "tab-here"),
+        ("trailing dots...", "trailing dots"),
+        ("...", "tag"),
+    ],
+)
+def test_tag_filename_is_safe_everywhere(tag, name):
+    assert tag_filename(tag) == name
+
+
+def test_long_tags_get_short_distinct_filenames():
+    first, second = "é" * 200 + "1", "é" * 200 + "2"
+
+    files = tag_files([first, second])
+
+    assert all(len(name.encode()) <= 110 for name in files.values())
+    assert files[first] != files[second]
+    assert tag_filename(first) == "é" * 50

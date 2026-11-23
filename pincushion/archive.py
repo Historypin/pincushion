@@ -20,12 +20,23 @@ from pincushion.media import MediaDownloader, media_type, media_url
 logger = logging.getLogger(__name__)
 
 
+# characters some filesystems don't allow in names, including control
+# characters (yes, we've noticed some nulls in tags)
+UNSAFE_CHARACTERS = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+# well under the usual 255 byte limit, leaving room for a suffix and .html
+MAX_TAG_FILENAME = 100
+
+
 def tag_filename(tag: str) -> str:
     """
     Return the file name (without .html) for a tag's page.
     """
-    # yes, we've noticed some nulls in tags
-    return tag.replace("\0", "").replace("/", "-")
+    name = UNSAFE_CHARACTERS.sub("-", tag)
+    # cut by bytes, since that's what filesystems limit, without splitting
+    # a character
+    name = name.encode()[:MAX_TAG_FILENAME].decode(errors="ignore")
+    # Windows drops trailing dots and spaces
+    return name.rstrip(". ") or "tag"
 
 
 def tag_files(tags: Iterable[str]) -> dict[str, str]:
@@ -144,6 +155,7 @@ class ArchiveGenerator:
         if self.downloader is not None:
             self.download_media()
             self.__dict__.pop("posters", None)
+            self.__dict__.pop("downloaded", None)
         media = self.media_types()
         self.write_index(media)
         self.write_collections(media)
@@ -167,11 +179,12 @@ class ArchiveGenerator:
         downloader.pin_images(
             list(tqdm.tqdm(self.pins, desc=f"{'pin images':20}", disable=not progress))
         )
+        # before the collection images, which can fall back to a poster
+        downloader.all_pin_av(self.pins, progress=progress)
         for coll in self.collections():
             path = f"collections/{coll['id']}/image.jpg"
             if not downloader.fetch_image(coll.get("banner_image_url"), path):
                 self.copy_first_pin_image(coll, path)
-        downloader.all_pin_av(self.pins, progress=progress)
 
     def copy_first_pin_image(self, coll: dict, rel_path: str) -> None:
         """
@@ -204,6 +217,7 @@ class ArchiveGenerator:
             partial=self.data.get("partial"),
             truncated=self.data.get("truncated", []),
             posters=self.posters,
+            downloaded=self.downloaded,
             **context,
         )
 
@@ -217,6 +231,13 @@ class ArchiveGenerator:
             for pin in self.pins
             if (self.archive_dir / "pins" / str(pin["id"]) / "poster.jpg").is_file()
         }
+
+    @functools.cached_property
+    def downloaded(self) -> set[int]:
+        """
+        The IDs of pins whose image, video or audio is in the archive.
+        """
+        return {pin["id"] for pin in self.pins if self.has_media(pin)}
 
     def has_media(self, pin: dict) -> bool:
         """
@@ -279,7 +300,6 @@ class ArchiveGenerator:
                 "../../",
                 pin=pin,
                 media_type=media[pin["id"]],
-                downloaded=self.has_media(pin),
                 media_url=media_url(pin),
                 collection=self.collection_of.get(pin["id"]),
                 title=pin["title"],

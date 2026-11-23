@@ -16,7 +16,7 @@
 <h1>{{ pin.title }}</h1>
 
 <div class="object">
-  {% if media_type in ('image', 'video', 'audio') and not downloaded %}
+  {% if media_type in ('image', 'video', 'audio') and pin.id not in downloaded %}
   {% if pin.id in posters %}<img src="poster.jpg" alt="">{% endif %}
   <p class="notice">
     The {{ media_type }} couldn't be downloaded when this archive was made.

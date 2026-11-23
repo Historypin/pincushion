@@ -165,10 +165,8 @@ def test_collection_without_images_uses_a_poster(tmp_path):
     data = json.loads((archive / "data.json").read_text())
     data["pins"][0]["collection_ids"] = []  # leave collection 3 with only the video
     (archive / "data.json").write_text(json.dumps(data))
-    (archive / "pins/11").mkdir(parents=True)
-    (archive / "pins/11/poster.jpg").write_bytes(b"poster")
 
-    class NoDownloads:
+    class PostersOnly:
         def fetch_image(self, url, rel_path):
             return False
 
@@ -176,8 +174,20 @@ def test_collection_without_images_uses_a_poster(tmp_path):
             pass
 
         def all_pin_av(self, pins, progress=True):
-            pass
+            # on a first build the poster only arrives with the video pass
+            (archive / "pins/11").mkdir(parents=True)
+            (archive / "pins/11/poster.jpg").write_bytes(b"poster")
 
-    ArchiveGenerator(archive, downloader=NoDownloads()).generate()
+    ArchiveGenerator(archive, downloader=PostersOnly()).generate()
 
     assert (archive / "collections/3/image.jpg").read_bytes() == b"poster"
+
+
+def test_gallery_leaves_out_media_that_was_not_downloaded(archive):
+    # pin 13's image and pin 11's video were never downloaded
+    index = read(archive, "index.html")
+    collection = read(archive, "collections", "3", "index.html")
+
+    assert "pins/13/image.jpg" not in index
+    assert "pins/10/image.jpg" in collection
+    assert "pins/11/media.mp4" not in collection

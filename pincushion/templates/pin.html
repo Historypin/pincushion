@@ -1,145 +1,105 @@
 {% extends "base.html" %}
 
 {% block breadcrumb %}
-<ul>
-  <li><a href="../../index.html">{{ index_title }}</a></li>
-  <li><a href="../../collections/{{ collection.slug }}/index.html">{{ collection.title }}</a></li>
-  <li>{{ pin.caption }}</li>
-</ul>
+{% if collection %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="../../collections/{{ collection.id }}/index.html">{{ collection.title }}</a></li>
+    <li>Pin {{ pin.id }}</li>
+  </ol>
+</nav>
+{% endif %}
 {% endblock %}
 
 {% block main %}
-<section class="pin">
-  <div class="media">
-  {% if media_type == 'image' %}
-  <img src="image.jpg">
-  {% elif media_type == 'video' %}
-  <video src="media.mp4" controls>
-  {% elif media_type == 'audio' %}
-  <audio src="media.mp3" controls>
-  {% elif media_type == 'text' %}
-  <p>{{ pin.display.content }}</p>
-  {% endif %}
-  </div>
-</section>
 
-<section class="description">
-  <h2>Description</h2>
-  <p class="description">
-    {{ pin.description | safe }}
+<h1>{{ pin.title }}</h1>
+
+<div class="object">
+  {% if media_type in ('image', 'video', 'audio') and pin.id not in downloaded %}
+  {% if pin.id in posters %}<img src="poster.jpg" alt="">{% endif %}
+  <p class="notice">
+    The {{ media_type }} couldn't be downloaded when this archive was made.
+    {% if media_url %}It may still be on <a href="{{ media_url }}">{{ media_url | host }}</a>.{% endif %}
   </p>
-</section>
-
-{% if pin.comments %}
-<section class="comments">
-<h2>Comments</h2>
-{% for comment in pin.comments %}
-<div class="comment">
-  <span class="name">{{ comment.user_name }}</span><br>
-  <span class="created">{{ comment.date_formated }}</span><br>
-  <span class="content">{{ comment['copy'] | safe }}</span>
+  {% elif media_type == 'image' %}
+  <img src="image.jpg" alt="">
+  {% elif media_type == 'video' %}
+  <video src="media.mp4" controls{% if pin.id in posters %} poster="poster.jpg"{% endif %}></video>
+  {% elif media_type == 'audio' %}
+  {% if pin.id in posters %}<img src="poster.jpg" alt="">{% endif %}
+  <audio src="media.mp3" controls></audio>
+  {% endif %}
 </div>
-{% endfor %}
-</section>
+
+{% if pin.description %}
+<div class="prose description">
+  {{ pin.description | safe }}
+</div>
 {% endif %}
 
-<section class="metadata">
+<dl class="record">
+  {% if pin.date %}
+  <dt>Date</dt>
+  <dd>{{ pin.date }}</dd>
+  {% endif %}
 
-  <dl>
+  {% if pin.latitude is not none and pin.longitude is not none %}
+  <dt>Location</dt>
+  <dd id="location">
+    <a href="../../map/index.html#{{ pin.id }}">{{ pin.latitude }}, {{ pin.longitude }}</a>
+  </dd>
+  {% endif %}
 
-    <dt>Creator</dt>
-    <dd>{{ pin.user_name }}</dd>
+  {% if pin.creator and pin.creator.strip() %}
+  <dt>Creator</dt>
+  <dd>{{ pin.creator }}</dd>
+  {% endif %}
 
-    {% if pin.location %}
-    <dt>Location</dt>
-    <dd id="location">
-     {{ pin.location.raw }} 
-     <a href="../../map/index.html#{{ pin.id }}">
-        ({{ pin.location.lat }}, {{ pin.location.lng }})
-     </a>
-    </dd>
-    {% endif %}
+  {% if pin.rights_statement and pin.rights_statement.strip() %}
+  <dt>Rights</dt>
+  <dd>{{ pin.rights_statement | urlize }}</dd>
+  {% endif %}
 
-    {% if pin.places %}
-    <dt>Places</dt>
-    <dd>
-      {% for place in pin.places %}
-        {{ place.title }}{{ ", " if not loop.last else "" }}
-      {% endfor %}
-    </dd>
-    {% endif %}
+  {% if pin.license %}
+  {% set label, href = license_label(pin.license) %}
+  <dt>License</dt>
+  <dd>{% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</dd>
+  {% endif %}
 
-    {% if pin.license %}
-    <dt>License</dt>
-    <dd><a href="{{ pin.license_key }}">{{ pin.license }}</a></dd>
-    {% endif %}
+  {% if pin.identifier %}
+  <dt>Identifier</dt>
+  <dd>{{ pin.identifier }}</dd>
+  {% endif %}
 
-    {% if pin.link %}
-    <dt>Link</dt>
-    <dd><a href="{{ pin.link }}">{{ pin.link }}</a></dd>
-    {% endif %}
+  {% if pin.source_link %}
+  <dt>Source</dt>
+  <dd><a href="{{ pin.source_link }}">{{ pin.source_link }}</a></dd>
+  {% endif %}
 
-    {% if pin.type == "video" or pin.type == "audio" %}
-    <dt>Original Media Link</dt>
-    <dd><a href="{{ pin.display.content }}">{{ pin.display.content }}</a></dd>
-    {% endif %}
+  {% if media_url and media_type in ('video', 'audio') %}
+  <dt>Original media</dt>
+  <dd><a href="{{ media_url }}">{{ media_url }}</a></dd>
+  {% endif %}
 
-    {% if pin.tags %}
-    <dt>Tags</dt>
-    <dd>
-      {% for tag in pin.tags %}
-      <a href="../../tags/{{ tag.text }}.html">{{ tag.text }}</a>{{ ", " if not loop.last else "" }}
-      {% endfor %}
-    </dd>
-    {% endif %}
+  {% if pin.tags %}
+  <dt>Tags</dt>
+  <dd>
+    {% for tag in pin.tags %}
+    <a href="../../tags/{{ tag_files[tag] | urlencode }}.html">{{ tag }}</a>{{ ", " if not loop.last else "" }}
+    {% endfor %}
+  </dd>
+  {% endif %}
 
-    {% if pin.date_added %}
-    <dt>Date Added</dt>
-    <dd>{{ pin.date_added }}</dd>
-    {% endif %}
+  {% if pin.created_at %}
+  <dt>Added to Historypin</dt>
+  <dd>{{ pin.created_at | long_date }}{% if pin.creator_name %} by {{ pin.creator_name }}{% endif %}</dd>
+  {% endif %}
 
-    {% if pin.date_taken %}
-    <dt>Date Taken</dt>
-    <dd>{{ pin.date_taken }}</dd>
-    {% endif %}
-
-    {% if pin.author %}
-    <dt>Author</dt>
-    <dd>{{ pin.author }}</dd>
-    {% endif %}
-
-    {% if pin.repository and pin.repository != " " %}
-    <dt>Repository</dt>
-    <dd>{{ pin.repository }}</dd>
-    {% endif %}
-
-    {% if pin.notes %}
-    <dt>Notes</dt>
-    <dd>{{ pin.notes }}</dd>
-    {% endif %}
-
-    {% if pin.rights_statement  and pin.rights_statement != " " %}
-    <dt>Rights Statement</dt>
-    <dd>{{ pin.rights_statement }}</dd>
-    {% endif %}
-
-    <dt>Historypin Link</dt>
-    <dd>
-      <a href="https://www.historypin.org/en/person/{{ pin.user_id }}/explore/pin/{{ pin.id }}">
-        https://www.historypin.org/en/person/{{ pin.user_id }}/explore/pin/{{ pin.id }}
-      </a>
-    </dd>
-
-  </dl>
-</section>
-
-<script>
-  window.addEventListener("load", (event) => {
-    if (! navigator.onLine) { 
-      let location = document.getElementById('location');
-      location.innerHTML = location.textContent + "<br>Connect to the Internet to view map.";
-    }
-  });
-</script>
+  {% if pin.url %}
+  <dt>On Historypin</dt>
+  <dd><a href="{{ pin.url }}">{{ pin.url }}</a></dd>
+  {% endif %}
+</dl>
 
 {% endblock %}

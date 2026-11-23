@@ -1,30 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    {% block head %}
-    <title>Pincushion: {{ title }}</title>
+    {% block head %}{% endblock %}
+    <title>{{ title }}{% if title != index_title %} – {{ index_title }}{% endif %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="utf-8">
-    {% endblock %}
     <style>
-
-    a {
-      text-decoration: none;
+    /*
+      Archive pages stay quiet so the pins come first. Everything here works
+      offline: the fonts and colours are the reader's own system ones.
+    */
+    :root {
+      color-scheme: light dark;
+      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Charter,
+        "Bitstream Charter", Georgia, serif;
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+        sans-serif;
+      --rule: color-mix(in srgb, CanvasText 18%, Canvas);
+      --quiet: color-mix(in srgb, CanvasText 62%, Canvas);
+      --measure: 45rem;
     }
 
     body {
-      margin: 10px 10% 10px 10%;
-      font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
-      line-height: 1.5;
-      font-size: 1.4em;
+      margin: 0 auto;
+      max-width: 76rem;
+      padding: 0 1.25rem;
+      background: Canvas;
+      color: CanvasText;
+      font-family: var(--serif);
+      font-size: 1.125rem;
+      line-height: 1.6;
     }
 
-    nav {
-      margin-bottom: 20px;
-      font-size: 1.5em;
+    a {
+      color: LinkText;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.15em;
     }
 
-    .breadcrumb ul {
+    a:focus-visible {
+      outline: 2px solid LinkText;
+      outline-offset: 2px;
+    }
+
+    h1, h2 {
+      font-weight: normal;
+      line-height: 1.25;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin: 1.5rem 0 1rem;
+      max-width: var(--measure);
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      margin: 2.5rem 0 1rem;
+    }
+
+    /* header: the archive's name, its sections, and where you are */
+
+    .site {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem 1.5rem;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 1rem 0 0.75rem;
+      border-bottom: 1px solid var(--rule);
+      font-family: var(--sans);
+      font-size: 0.95rem;
+    }
+
+    .site .name {
+      color: CanvasText;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .site ul {
+      display: flex;
+      gap: 1.25rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .breadcrumb {
+      margin: 0.75rem 0 0;
+      font-family: var(--sans);
+      font-size: 0.875rem;
+      color: var(--quiet);
+    }
+
+    .breadcrumb ol {
       display: flex;
       flex-wrap: wrap;
       list-style: none;
@@ -33,146 +103,223 @@
     }
 
     .breadcrumb li:not(:last-child)::after {
-      display: inline-block;
-      margin: 0 .25rem;
-      content: ">";
+      content: "/";
+      margin: 0 0.5rem;
     }
+
+    /* text */
+
+    .prose {
+      max-width: var(--measure);
+    }
+
+    .notice {
+      max-width: var(--measure);
+      padding-left: 0.75rem;
+      border-left: 3px solid var(--quiet);
+      overflow-wrap: anywhere;
+    }
+
+    /* galleries: equal cells, the image on top and a short caption below */
 
     .gallery {
+      list-style: none;
+      padding: 0;
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      align-items: start;
+      /* as many columns as fit, so the page never scrolls sideways */
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+      gap: 2rem 1.5rem;
+      margin: 1.5rem 0 3rem;
     }
 
-    .gallery .gallery-item {
-      border: 1px groove #ccc;
-      margin: 10px;
-      padding: 10px;
-      text-align: center;
+    .gallery a {
+      color: CanvasText;
+      text-decoration: none;
     }
 
-    .gallery .gallery-item .name {
-      font-weight: bold;
-      margin-bottom: 5px;
+    .gallery .frame {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 4 / 3;
+      background: color-mix(in srgb, CanvasText 5%, Canvas);
     }
 
-    .gallery .gallery-item .description {
-      text-align: left;
-      margin: 5px;
+    .gallery img, .gallery video {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
     }
 
-    .gallery .gallery-item img {
-      max-width: 400px;
-      max-height: 400px;
-      margin-left: auto;
-      margin-right: auto;
+    .gallery audio {
+      width: 90%;
     }
 
-    .gallery .gallery-item video {
-      max-width: 400px;
-      max-height: 400px;
+    .gallery .text-pin {
+      padding: 1rem;
+      font-size: 0.95rem;
+      color: var(--quiet);
+      overflow: hidden;
+      max-height: 100%;
     }
 
-    .media {
-      text-align: center;
+    .gallery .caption {
+      margin-top: 0.5rem;
+      font-family: var(--sans);
+      font-size: 0.875rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
 
-    .media img, .media video {
-      max-width: 80%;
-      margin: 0 auto 0 auto;
-    }
-
-    .media p {
-      text-align: left;
-      border: thin gray groove;
-      padding: 15px;
-      font-size: larger;
-    }
-
-    dl {
-      columns: 2;
-    }
-
-    dl dt {
-      font-weight: bold;
-      font-size: larger;
-    }
-
-    dl dd {
-      margin-left: 0px;
-      margin-bottom: 20px;
-    }
-
-    .comment {
-      border: 1px groove #ddd;
-      padding: 8px;
-      max-width: 800px;
-      border-radius: 5px;
-    }
-
-    .comment .name {
+    .gallery a:hover .caption, .gallery a:focus-visible .caption {
       text-decoration: underline;
     }
 
-    .comment .created {
-      color: gray;
+    /* a pin: the object, then its record */
+
+    .object {
+      margin: 0 0 2rem;
     }
 
-    .tags {
-      display: flex;
-      flex-direction: row;
-      flex-wrap: wrap;
+    .object img, .object video {
+      display: block;
+      max-width: 100%;
+      max-height: 80vh;
     }
 
-    .tag {
-      margin: 5px;
-      padding: 5px;
-      border: 1px groove #ddd;
+    .object.portrait img {
+      max-height: 12rem;
     }
 
-    .tag:hover {
-      background: pink;
+    .object audio {
+      width: 100%;
+      max-width: var(--measure);
     }
 
-    /* Mobile Devices */
+    .record {
+      display: grid;
+      grid-template-columns: minmax(8rem, max-content) minmax(0, var(--measure));
+      gap: 0.6rem 1.5rem;
+      margin: 2rem 0;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--rule);
+    }
 
-    @media only screen and (max-width: 600px) {
+    .record dt {
+      font-family: var(--sans);
+      font-size: 0.875rem;
+      color: var(--quiet);
+      padding-top: 0.2rem;
+    }
+
+    .record dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    /* tags: an index, grouped by letter */
+
+    .tag-index h2 {
+      margin: 1.75rem 0 0.5rem;
+      font-family: var(--sans);
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .tag-index ul {
+      columns: 15rem;
+      column-gap: 2rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .tag-index li {
+      break-inside: avoid;
+    }
+
+    .count {
+      font-family: var(--sans);
+      font-size: 0.8rem;
+      color: var(--quiet);
+    }
+
+    /* where the archive came from */
+
+    .colophon {
+      margin: 4rem 0 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--rule);
+      font-family: var(--sans);
+      font-size: 0.875rem;
+      color: var(--quiet);
+    }
+
+    .colophon p {
+      margin: 0.25rem 0;
+      max-width: var(--measure);
+    }
+
+    @media (max-width: 40rem) {
       body {
-        margin: 10px;
-        font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
-        line-height: 1.1;
-        font-size: 1.0em;
+        font-size: 1rem;
       }
 
-      .gallery {
-        grid-template-columns: repeat(1, 1fr);
+      h1 {
+        font-size: 1.6rem;
       }
 
-      .gallery .gallery-item img {
-        max-width: 300px;
-        max-height: 300px;
+      .record {
+        grid-template-columns: 1fr;
+        gap: 0.1rem;
       }
 
-      .gallery .gallery-item video {
-        max-width: 300px;
-        max-height: 300px;
+      .record dd {
+        margin-bottom: 0.75rem;
       }
-      
-      dl {
-        columns: 1;
-      }
-
     }
-
     </style>
+    {% block style %}{% endblock %}
   </head>
   <body>
-    <nav aria-label="Breadcrumb" class="breadcrumb">
-      {% block breadcrumb %}{% endblock %}
-    </nav>
+    <header class="site">
+      <a class="name" href="{{ root }}index.html">{{ index_title }}</a>
+      <nav aria-label="Archive">
+        <ul>
+          <li><a href="{{ root }}tags/index.html">Tags</a></li>
+          <li><a href="{{ root }}map/index.html">Map</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    {% block breadcrumb %}{% endblock %}
+
     <main>
-      {% block main %}
-      {% endblock %}
+      {% block main %}{% endblock %}
     </main>
+
+    <footer class="colophon">
+      <p>
+        Archived from {{ source }}{% if fetched_at %} on {{ fetched_at | long_date }}{% endif %}
+        with pincushion {{ version }}. {{ pin_count | plural("pin") }}.
+      </p>
+      {% if partial %}
+      <p>
+        This archive leaves out {{ partial.collections_missing | plural("collection") }} and {{ partial.pins_missing | plural("pin") }}
+        that the API key used to make it couldn't see.
+      </p>
+      {% endif %}
+      {% if truncated %}
+      <p>
+        Some lists reached the Historypin API's limit of 10,000 items, so this
+        archive may be missing items from them.
+      </p>
+      {% endif %}
+    </footer>
   </body>
 </html>

@@ -1,167 +1,371 @@
-import logging
-import time
-from functools import cache
-from typing import Optional, Generator, Dict, Any, Union
+from __future__ import annotations
 
+import logging
+import math
+import time
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from importlib.metadata import version
+from typing import TYPE_CHECKING
+from urllib.parse import urlencode, urlsplit
+
+import click
 import requests
 import tqdm
 
+if TYPE_CHECKING:
+    from pincushion.media import MediaDownloader
+
 logger = logging.getLogger(__name__)
 
+DEFAULT_SITE = "https://historypin.org"
+EXPORT_CAP = 10000
+DEFAULT_RETRY_AFTER = 60
+TIMEOUT = 60
+# attempts for a server error or a network failure, with backoff between
+ATTEMPTS = 3
+DATA_VERSION = version("pincushion")
+# identify pincushion to Historypin and to the sites media is downloaded from
+USER_AGENT = f"pincushion/{DATA_VERSION} (+https://github.com/historypin/pincushion)"
 
-@cache
-def get_user(user_id: int, progress: bool = True) -> dict:
-    data: Dict[str, Union[dict, list]] = {}
-    data["user"] = get_json("user/get", {"id": user_id})
 
-    # add this user's collections, tours and pins
-    data["collections"] = list(
-        get_listing(user_id, "projects", "collection", progress=progress)
+class HistorypinError(Exception):
+    """A problem talking to the Historypin API, with a message for people."""
+
+
+class Client:
+    """
+    A small client for the Historypin data export API (/api/v1/).
+    """
+
+    def __init__(self, api_key: str, site: str = DEFAULT_SITE, pause: float = 0.25):
+        self.site = site.rstrip("/")
+        self.pause = pause
+        self.last_count: int | None = None
+        self.session = requests.Session()
+        self.session.headers["Authorization"] = f"Bearer {api_key}"
+        self.session.headers["User-Agent"] = USER_AGENT
+
+    def get(self, path: str, params: dict | None = None) -> dict:
+        """
+        Get a path relative to /api/v1/ and return the decoded JSON.
+        """
+        return self._get(f"{self.site}/api/v1/{path}", params)
+
+    def pages(self, path: str, params: dict | None = None) -> Iterator[list[dict]]:
+        """
+        Yield each page of a paginated list, following the next links.
+        """
+        self.last_count = None
+        url: str | None = f"{self.site}/api/v1/{path}"
+        while url is not None:
+            page = self._get(url, params)
+            # the query string of the next link already carries the params
+            params = None
+            if self.last_count is None:
+                self.last_count = page.get("count")
+            yield page["results"]
+            url = self._on_site(page["next"]) if page.get("next") else None
+
+    def list(self, path: str, params: dict | None = None) -> Iterator[dict]:
+        """
+        Yield every item in a paginated list.
+        """
+        for results in self.pages(path, params):
+            yield from results
+
+    def is_capped(self) -> bool:
+        """
+        Whether the last list reached the API's export cap, so items may be
+        missing from the end of it.
+        """
+        return self.last_count == EXPORT_CAP
+
+    def _back_off(self, failures: int, problem: str) -> None:
+        wait = 10 * 2 ** (failures - 1)
+        logger.warning(f"{problem}, retrying in {wait} seconds")
+        click.echo(f"{problem.capitalize()}, retrying in {wait} seconds", err=True)
+        time.sleep(wait)
+
+    def _on_site(self, url: str) -> str:
+        # A proxy can make the API build next links with an internal host or
+        # http scheme, so request the same path on the configured site.
+        parts = urlsplit(url)
+        query = f"?{parts.query}" if parts.query else ""
+        return f"{self.site}{parts.path}{query}"
+
+    def _get(self, url: str, params: dict | None) -> dict:
+        failures = 0
+        while True:
+            time.sleep(self.pause)
+            logger.info(f"fetching {url} {params or ''}")
+            try:
+                resp = self.session.get(url, params=params, timeout=TIMEOUT)
+            except requests.RequestException as e:
+                failures += 1
+                if failures >= ATTEMPTS:
+                    raise HistorypinError(f"Couldn't reach {self.site}: {e}") from e
+                self._back_off(failures, f"couldn't reach {self.site}")
+                continue
+            if resp.status_code == 429:
+                wait = int(resp.headers.get("Retry-After", DEFAULT_RETRY_AFTER))
+                logger.warning(f"rate limited, waiting {wait} seconds")
+                click.echo(f"Rate limited, waiting {wait} seconds", err=True)
+                time.sleep(wait)
+                continue
+            if resp.status_code >= 500:
+                failures += 1
+                if failures < ATTEMPTS:
+                    self._back_off(failures, f"{resp.status_code} from {url}")
+                    continue
+            break
+
+        if resp.status_code == 200:
+            return resp.json()
+        raise HistorypinError(_error_message(resp))
+
+
+def fetch_user(
+    client: Client, downloader: MediaDownloader | None, user_id: int | None = None
+) -> dict:
+    """
+    Fetch a member's profile, pins and collections. Without a user_id, fetch
+    the API key owner's. Media is downloaded page by page as it arrives.
+    """
+    member = client.get("members/me/" if user_id is None else f"members/{user_id}/")
+    data = _new_data("user", client.site)
+    data["member"] = member
+    # name the member, so archiving the wrong person is obvious straight away
+    click.echo(
+        f"Archiving {member.get('name') or 'unnamed member'} (user ID {member['id']})"
     )
-    data["tours"] = list(get_listing(user_id, "projects", "tour", progress=progress))
-    data["pins"] = list(get_listing(user_id, "pin", progress=progress))
+    if downloader is not None:
+        downloader.fetch_image(member.get("image_url"), "index.jpg")
 
-    # get the comments on each of their pins
-    if progress:
-        desc = "comments"
-        bar = tqdm.tqdm(desc=f"{desc:20}", total=len(data["pins"]), leave=True)
+    data["pins"] = _fetch_pins(client, downloader, data, {"creator": member["id"]})
+    # only the collections that hold the member's pins, since collections
+    # without them would never be shown
+    wanted = {cid for pin in data["pins"] for cid in pin.get("collection_ids", [])}
+    if user_id is None:
+        data["collections"] = _fetch_own_collections(client, downloader, wanted)
     else:
-        bar = None
-
-    for pin in data["pins"]:
-        pin["comments"] = get_comments(pin["id"])
-        if bar is not None:
-            bar.update(1)
-
+        # for anyone but the key owner the API can only filter by owner
+        data["collections"] = _fetch_collections(
+            client, downloader, data, {"owner": user_id}, wanted
+        )
     return data
 
 
-def get_listing(
-    user_id: int,
-    listing_type: str,
-    item_type: Optional[str] = None,
-    progress: bool = True,
-) -> Generator[dict, None, None]:
+def fetch_collection(
+    client: Client, downloader: MediaDownloader | None, collection_id: int
+) -> dict:
     """
-    Iterate through a Historypin listing for a user by type (projects or pin). For projects
-    you need to further specify whether you want collections or tours.
+    Fetch a collection, its descendant collections and all their pins,
+    walking the tree breadth first. Media is downloaded as it arrives.
     """
-    params: Dict[str, Any] = {"user": user_id, "page": 0, "limit": 100}
+    root = client.get(f"collections/{collection_id}/")
+    data = _new_data("collection", client.site)
+    data["collection"] = root
+    if downloader is not None:
+        downloader.fetch_image(root.get("banner_image_url"), "index.jpg")
 
-    if item_type is not None:
-        params["type"] = item_type
+    # collections can be nested in more than one place, and in principle
+    # can form cycles, so remember which ones have been seen
+    seen = {root["id"]}
+    queue = [root]
+    pins: dict[int, dict] = {}
+    while queue:
+        coll = queue.pop(0)
+        # pin_ids and child_ids list everything, whatever the key can see, so
+        # skip the requests for lists that are sure to be empty
+        if _may_have(coll, "pin_ids"):
+            params = {"collections": coll["id"]}
+            for pin in _fetch_pins(client, downloader, data, params):
+                pins.setdefault(pin["id"], pin)
+        if not _may_have(coll, "child_ids"):
+            continue
+        for child in _fetch_collections(
+            client, downloader, data, {"parent": coll["id"]}
+        ):
+            if child["id"] not in seen:
+                seen.add(child["id"])
+                data["collections"].append(child)
+                queue.append(child)
+    data["pins"] = list(pins.values())
 
-    if progress:
-        count = get_json(f"{listing_type}/listing", params)["count"]
-        desc = (item_type or listing_type) + "s"
-        bar = tqdm.tqdm(desc=f"{desc:20}", total=count, leave=True)
-    else:
-        bar = None
-
-    while True:
-        params["page"] += 1
-        page = get_json(f"{listing_type}/listing", params)
-        if len(page["results"]) == 0:
-            break
-
-        for result in page["results"]:
-            if bar is not None:
-                bar.update(1)
-
-            # get and return the full item metadata for the resource
-            if listing_type == "projects":
-                yield get_json(f"{result['slug']}/projects/get", {})
-            elif listing_type == "pin":
-                yield get_pin(result["id"])
-
-
-@cache
-def get_pin(pin_id) -> dict:
-    return get_json("pin/get", {"id": pin_id})
+    # a regular key can't see other members' pins or collections it doesn't
+    # manage, but each collection's child_ids and pin_ids list everything
+    fetched = [root, *data["collections"]]
+    missing_collections = {
+        c for coll in fetched for c in coll.get("child_ids", [])
+    } - seen
+    missing_pins = {
+        p for coll in fetched for p in coll.get("pin_ids", [])
+    } - pins.keys()
+    if missing_collections or missing_pins:
+        data["partial"] = {
+            "collections_missing": len(missing_collections),
+            "pins_missing": len(missing_pins),
+        }
+        click.echo(
+            f"Warning: the archive leaves out {len(missing_collections)} collections "
+            f"and {len(missing_pins)} pins that this API key can't see. Archiving "
+            "a whole collection needs a staff key.",
+            err=True,
+        )
+    return data
 
 
-@cache
-def get_collection(slug: str, progress: bool = True) -> dict:
+def _may_have(coll: dict, field: str) -> bool:
+    return coll.get(field) is None or len(coll[field]) > 0
+
+
+def _fetch_own_collections(
+    client: Client, downloader: MediaDownloader | None, wanted: set[int]
+) -> list[dict]:
     """
-    Get a collection and all its pins and subcollections.
+    Fetch the wanted collections the key owner can see. A regular key's list
+    only has the collections its owner owns or manages, but a staff key's has
+    every collection on the site, so page through the list only while that
+    takes fewer requests than getting the rest of the wanted ones one by one.
     """
+    collections: list[dict] = []
+    remaining = set(wanted)
+    listed = 0
+    if remaining:
+        for results in client.pages("collections/"):
+            listed += len(results)
+            collections.extend(coll for coll in results if coll["id"] in remaining)
+            remaining -= {coll["id"] for coll in results}
+            pages_left = math.ceil(
+                ((client.last_count or 0) - listed) / max(len(results), 1)
+            )
+            if not remaining or len(remaining) < pages_left:
+                break
+        else:
+            # what's left isn't visible to the key, unless the list was capped
+            if not client.is_capped():
+                remaining = set()
 
-    coll = get_json(f"{slug}/projects/get", params={})
+    for cid in sorted(remaining):
+        try:
+            collections.append(client.get(f"collections/{cid}/"))
+        except HistorypinError as e:
+            logger.warning(f"leaving out collection {cid}: {e}")
 
-    collections = []
-    pins = []
-
-    if progress:
-        count = coll["counts"]["collections"] + coll["counts"]["pins"]
-        desc = coll["slug"]
-        bar = tqdm.tqdm(desc=f"{desc:20}", total=count, leave=True)
-    else:
-        bar = None
-
-    # use the gallery to see what collections and/or pins are in a collection
-    for result in get_gallery(slug):
-        if result["node_type"] == "pin":
-            pin = get_pin(result["id"])
-            pin["comments"] = get_comments(result["id"])
-            pins.append(pin)
-            if bar is not None:
-                bar.update(1)
-
-        elif result["node_type"] == "project":
-            # this is recursive since a collection can contain collections!
-            collections.append(get_collection(f"{slug}/{result['slug']}"))
-            if bar is not None:
-                bar.update(1)
-
-    # flatten hierarchical collections into a single deduplicated list
-    coll["collections"] = list(_unique_collections(collections))
-    coll["pins"] = pins
-
-    return coll
+    if downloader is not None:
+        for coll in collections:
+            downloader.fetch_image(
+                coll.get("banner_image_url"), f"collections/{coll['id']}/image.jpg"
+            )
+    return sorted(collections, key=lambda coll: coll["id"])
 
 
-def get_gallery(slug: str) -> Generator[dict, None, None]:
-    page = 1
-    while True:
-        data = get_json(f"{slug}/pin/get_gallery", params={"paging": page})
-        if len(data["results"]) == 0:
-            break
-
-        for result in data["results"]:
-            if result["node_type"] in ["project", "pin"]:
-                yield result
-
-        page += 1
-
-
-@cache
-def get_comments(pin_id) -> dict:
-    return get_json("comments/get", {"item_id": pin_id})["comments"]
+def _new_data(kind: str, site: str) -> dict:
+    return {
+        "pincushion_version": DATA_VERSION,
+        "site": site,
+        "fetched_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "type": kind,
+        "member": None,
+        "collection": None,
+        "collections": [],
+        "pins": [],
+        "partial": None,
+        "truncated": [],
+    }
 
 
-def get_json(api_path: str, params: dict, sleep=0.25) -> dict:
-    time.sleep(sleep)
-    url = f"https://www.historypin.org/en/api/{api_path}.json"
-    logger.info(f"fetching {url} {params}")
-    return requests.get(url, params=params).json()
+def _fetch_pins(
+    client: Client, downloader: MediaDownloader | None, data: dict, params: dict
+) -> list[dict]:
+    pins: list[dict] = []
+    for results, bar in _pages(client, "pins/", params, data, "pins"):
+        # download each page's images now, before their links can expire,
+        # moving the progress bar as each one is done
+        if downloader is not None:
+            downloader.pin_images(results, progress=bar.update)
+        else:
+            bar.update(len(results))
+        pins.extend(results)
+    return pins
 
 
-def _flatten_collections(collections) -> Generator[dict, None, None]:
+def _fetch_collections(
+    client: Client,
+    downloader: MediaDownloader | None,
+    data: dict,
+    params: dict,
+    wanted: set[int] | None = None,
+) -> list[dict]:
+    collections: list[dict] = []
+    for results, bar in _pages(client, "collections/", params, data, "collections"):
+        bar.update(len(results))
+        if wanted is not None:
+            results = [coll for coll in results if coll["id"] in wanted]
+        if downloader is not None:
+            for coll in results:
+                downloader.fetch_image(
+                    coll.get("banner_image_url"), f"collections/{coll['id']}/image.jpg"
+                )
+        collections.extend(results)
+    return collections
+
+
+def _pages(
+    client: Client, path: str, params: dict, data: dict, desc: str
+) -> Iterator[tuple[list[dict], tqdm.tqdm]]:
     """
-    A generator that iterates through each collection and subcollection in a
-    list of collections.
+    Yield the pages of a list along with its progress bar, which the caller
+    moves, and record in data if the list reached the export cap.
     """
-    for coll in collections:
-        yield from _flatten_collections(coll["collections"])
-        yield coll
+    bar = None
+    for results in client.pages(path, params):
+        if bar is None:
+            bar = tqdm.tqdm(desc=f"{desc:20}", total=client.last_count, leave=True)
+        yield results, bar
+    if bar is not None:
+        bar.close()
+
+    if client.is_capped():
+        listing = f"{path}?{urlencode(params)}" if params else path
+        data["truncated"].append(listing)
+        click.echo(
+            f"Warning: {listing} reached the API's limit of {EXPORT_CAP:,} items, "
+            "so the archive may be missing some.",
+            err=True,
+        )
 
 
-def _unique_collections(collections) -> Generator[dict, None, None]:
-    """
-    Generate a list of unique collections in a list of collections.
-    """
-    seen = set()
-    for coll in _flatten_collections(collections):
-        if coll["id"] not in seen:
-            yield coll
-            seen.add(coll["id"])
+def _error_message(resp: requests.Response) -> str:
+    status = resp.status_code
+    if status == 401:
+        return "The API key is invalid or inactive. Check HISTORYPIN_KEY or --api-key."
+    if status == 403 and "cf-mitigated" in resp.headers:
+        return (
+            "The request was blocked by Cloudflare's bot check before it reached "
+            "Historypin. The site needs to exempt /api/v1/ from the challenge."
+        )
+    if status == 403:
+        return (
+            "API Access is not enabled for this account. Ask a Historypin admin "
+            "to turn on the API Access feature for you."
+        )
+    if status == 404:
+        return f"{resp.url} was not found, or isn't visible to this API key."
+    if status == 400:
+        return f"The API rejected the request: {_flatten(resp)}"
+    return f"Unexpected {status} response from {resp.url}"
+
+
+def _flatten(resp: requests.Response) -> str:
+    try:
+        body = resp.json()
+    except ValueError:
+        return resp.text
+    if isinstance(body, dict):
+        return "; ".join(
+            f"{key}: {' '.join(map(str, value)) if isinstance(value, list) else value}"
+            for key, value in body.items()
+        )
+    return str(body)

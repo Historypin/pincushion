@@ -1,0 +1,40 @@
+{% macro pin_gallery(pins, media, root, css="gallery") %}
+<ul class="{{ css }}" role="list">
+  {% for pin in pins %}
+  {% set kind = media[pin.id] %}
+  <li>
+    <a href="{{ root }}pins/{{ pin.id }}/index.html">
+      <div class="frame">
+        {% if kind == 'image' and pin.id in downloaded %}
+        <img src="{{ root }}pins/{{ pin.id }}/image.jpg" alt="" loading="lazy">
+        {% elif kind in ('video', 'audio') and pin.id in posters %}
+        <img src="{{ root }}pins/{{ pin.id }}/poster.jpg" alt="" loading="lazy">
+        {% elif kind == 'video' and pin.id in downloaded %}
+        <video src="{{ root }}pins/{{ pin.id }}/media.mp4" preload="metadata"></video>
+        {% elif kind == 'audio' and pin.id in downloaded %}
+        <audio src="{{ root }}pins/{{ pin.id }}/media.mp3" controls preload="none"></audio>
+        {% else %}
+        <div class="text-pin">{{ (pin.description or '') | striptags | truncate(160) }}</div>
+        {% endif %}
+      </div>
+      <div class="caption">{{ pin.title }}</div>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro collection_gallery(collections, root) %}
+<ul class="gallery" role="list">
+  {% for coll in collections %}
+  <li>
+    <a href="{{ root }}collections/{{ coll.id }}/index.html">
+      <div class="frame">
+        <img src="{{ root }}collections/{{ coll.id }}/image.jpg" alt="" loading="lazy">
+      </div>
+      <div class="caption">{{ coll.title }}</div>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
